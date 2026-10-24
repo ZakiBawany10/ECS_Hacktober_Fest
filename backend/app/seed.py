@@ -1,6 +1,7 @@
 # One main-sequence star per spectral type, with mass and temperature inside the ranges in
-# docs/main_sequence_pricing_data.md. Mass is in solar units, temperature in K. Each star's L is
-# generated at startup within its spectral type's bounds (see lifecycle.MAIN_SEQUENCE_L_BOUNDS).
+# docs/main_sequence_pricing_data.md. Mass is in solar units, temperature in K; both are display only.
+# Each star's L is generated at startup within its spectral type's bounds, and the spectral type
+# decides its lifecycle path (see lifecycle.MAIN_SEQUENCE_L_BOUNDS and lifecycle.LIFECYCLE_PATHS).
 # seconds_left (optional) starts a star late in its main-sequence life so the demo shows a transition early.
 SEED_STARS = [
     {"id": "kestrel", "name": "Kestrel", "spectral_type": "O", "mass": 40.0, "temperature": 40_000.0, "seconds_left": 40},

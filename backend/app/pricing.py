@@ -5,7 +5,9 @@ from . import config
 
 
 def price_from_luminosity(L: float) -> float:
-    """Share price from luminosity in solar units, rounded to 2 decimal places."""
+    """Share price from luminosity in solar units, rounded to 2 decimal places. No light, no value."""
+    if L <= 0:
+        return 0.0
     price = config.PRICE_SCALE * (math.log10(L) + config.LOG_LUMINOSITY_OFFSET)
     return round(max(price, 0.0), 2)
 

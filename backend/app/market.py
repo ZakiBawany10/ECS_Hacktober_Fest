@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 
 from . import config
 from .lifecycle import (
+    DARK_STAGES,
     MAIN_SEQUENCE_L_BOUNDS,
     SNAP_STAGES,
     STAGE_L_BOUNDS,
@@ -91,7 +92,7 @@ class Market:
                 L=L,
                 price=price_from_luminosity(L),
             )
-            star.ticks_left = roll_duration_ticks(star.stage, star.mass, self.rng)
+            star.ticks_left = roll_duration_ticks(star.stage, star.spectral_type, self.rng)
             if star.ticks_left is not None and "seconds_left" in seed:
                 star.ticks_left = seconds_to_ticks(seed["seconds_left"])
             star.history.append((self.tick, star.price))
@@ -99,7 +100,10 @@ class Market:
 
     def _enter_stage(self, star: Star, stage: Stage) -> None:
         star.stage = stage
-        star.ticks_left = roll_duration_ticks(stage, star.mass, self.rng)
+        star.ticks_left = roll_duration_ticks(stage, star.spectral_type, self.rng)
+        if stage in DARK_STAGES:
+            star.base_L = star.L = 0.0
+            return
         # Twinkle's mean reversion eases L towards the new base_L over the next few ticks.
         star.base_L = generate_luminosity(STAGE_L_BOUNDS[stage], self.rng)
         if stage in SNAP_STAGES:
@@ -111,12 +115,13 @@ class Market:
             if star.ticks_left is not None:
                 star.ticks_left -= 1
                 if star.ticks_left <= 0:
-                    stage = next_stage(star.stage, star.mass)
+                    stage = next_stage(star.stage, star.spectral_type)
                     if stage is None:
                         star.ticks_left = None
                     else:
                         self._enter_stage(star, stage)
-            star.L = twinkle(star.L, star.base_L, self.rng)
+            if star.stage not in DARK_STAGES:
+                star.L = twinkle(star.L, star.base_L, self.rng)
             star.price = price_from_luminosity(star.L)
             star.history.append((self.tick, star.price))
 

@@ -4,7 +4,7 @@ import random
 import pytest
 
 from app import config
-from app.lifecycle import MAIN_SEQUENCE_L_BOUNDS, STAGE_L_BOUNDS, generate_luminosity
+from app.lifecycle import DARK_STAGES, MAIN_SEQUENCE_L_BOUNDS, STAGE_L_BOUNDS, generate_luminosity
 from app.market import Market, MarketError, NotFoundError
 from app.pricing import price_from_luminosity, twinkle
 
@@ -13,6 +13,7 @@ def test_price_follows_log_luminosity():
     assert price_from_luminosity(1.0) == 500.0  # the Sun: 100 × (0 + 5)
     assert price_from_luminosity(1_000.0) == 800.0
     assert price_from_luminosity(3e-4) == pytest.approx(147.71, abs=0.01)  # smallest M star
+    assert price_from_luminosity(0.0) == 0.0  # black hole
 
 
 def test_twinkle_stays_near_base():
@@ -123,42 +124,55 @@ def walk_lifecycle(market: Market, star_id: str) -> list[str]:
         market.advance()
         if star.stage != stages[-1]:
             stages.append(star.stage)
+            if star.stage in DARK_STAGES:
+                continue
             low, high = STAGE_L_BOUNDS[star.stage]
             assert low <= star.base_L <= high * (1 + 1e-12)
         assert star.price == price_from_luminosity(star.L)
     return stages
 
 
-def test_heavy_stars_go_supernova():
+@pytest.mark.parametrize(
+    ("star_id", "expected"),
+    [
+        ("kestrel", ["main_sequence", "blue_hypergiant", "supernova", "black_hole"]),  # O
+        ("brightwater", ["main_sequence", "red_hypergiant", "supernova", "neutron_star"]),  # B
+        ("altra", ["main_sequence", "blue_giant", "planetary_nebula", "white_dwarf"]),  # A
+        ("fenwick", ["main_sequence", "blue_giant", "planetary_nebula", "white_dwarf"]),  # F
+        ("sol-nova", ["main_sequence", "red_giant", "planetary_nebula", "white_dwarf"]),  # G
+        ("kora", ["main_sequence", "red_giant", "planetary_nebula", "white_dwarf"]),  # K
+        ("ember", ["main_sequence", "red_giant", "planetary_nebula", "white_dwarf"]),  # M
+    ],
+)
+def test_spectral_type_decides_lifecycle(star_id, expected):
+    assert walk_lifecycle(make_market(), star_id) == expected
+
+
+@pytest.mark.parametrize(("spectral_type", "stage"), [("O", "blue_hypergiant"), ("B", "red_hypergiant")])
+def test_hypergiant_starts_above_main_sequence(spectral_type, stage):
+    assert STAGE_L_BOUNDS[stage][0] >= MAIN_SEQUENCE_L_BOUNDS[spectral_type][1]
+
+
+def test_path_ignores_mass():
     market = make_market()
-    assert walk_lifecycle(market, "kestrel") == [
-        "main_sequence", "red_supergiant", "supernova", "black_hole",
-    ]  # 40 M☉
-    assert walk_lifecycle(market, "brightwater") == [
-        "main_sequence", "red_supergiant", "supernova", "neutron_star",
-    ]  # 8 M☉
+    market.stars["sol-nova"].mass = 50.0
+    assert walk_lifecycle(market, "sol-nova")[1] == "red_giant"
 
 
-def test_sun_like_star_becomes_white_dwarf():
+def test_black_hole_price_sits_at_zero():
     market = make_market()
-    assert walk_lifecycle(market, "sol-nova") == [
-        "main_sequence", "red_giant", "planetary_nebula", "white_dwarf",
-    ]
-
-
-def test_red_dwarf_never_evolves():
-    market = make_market()
-    star = market.stars["ember"]
-    assert star.ticks_left is None
-    for _ in range(50):
+    walk_lifecycle(market, "kestrel")
+    star = market.stars["kestrel"]
+    for _ in range(20):
         market.advance()
-    assert star.stage == "main_sequence"
+    assert star.L == 0.0
+    assert [price for _, price in list(star.history)[-20:]] == [0.0] * 20
 
 
 def test_supernova_snaps_to_new_luminosity():
     market = make_market()
     star = market.stars["kestrel"]
-    star.stage = "red_supergiant"
+    star.stage = "blue_hypergiant"
     star.ticks_left = 1
     market.advance()
     assert star.stage == "supernova"
