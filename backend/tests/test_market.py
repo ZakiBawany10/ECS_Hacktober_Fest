@@ -16,7 +16,7 @@ from app.lifecycle import (
     next_stage,
     seconds_to_ticks,
 )
-from app.events import MAJOR_TYPES, MOMENTS, eligible
+from app.events import MAJOR_TYPES, MOMENTS, eligible, star_weight
 from app.market import Market, MarketError, NotFoundError
 from app.pricing import apply_impact, luminosity_from_price, market_price, price_from_luminosity, twinkle
 
@@ -622,3 +622,87 @@ def test_every_event_news_moment_is_known():
     market = Market(rng=random.Random(4))
     moments = news_moments(market, 3000)
     assert moments and all(moment in MOMENTS[event_type] for event_type, moment in moments)
+
+
+def settle(market: Market, star_id: str) -> None:
+    market.stars[star_id].stage_tick = market.tick - seconds_to_ticks(60)
+
+
+def test_life_needs_a_settled_yellow_or_red_dwarf():
+    market = make_market()
+    assert not eligible("intelligent_life", market.stars["kora"], market)  # only just started
+    settle(market, "kora")
+    assert eligible("intelligent_life", market.stars["kora"], market)
+    settle(market, "altra")
+    assert not eligible("intelligent_life", market.stars["altra"], market)  # type A: too short-lived
+
+
+def test_civilisation_levels_up_and_lifts_the_price():
+    market = make_market()
+    settle(market, "kora")
+    civ = market.start_event("intelligent_life", "kora")
+    star = market.stars["kora"]
+    for _ in range(20):
+        market.advance()
+    assert star.event_multiplier == pytest.approx(1.05, abs=0.005)
+    market.rng = random.Random(1)
+    moments = []
+    while civ.level < 3 and len(moments) < 2000:
+        civ.next_risk_tick = market.tick + 10  # keep it alive for this test
+        moments += [m for _, m in news_moments(market, 1)]
+        if civ.rolls_left == 0:
+            civ.rolls_left = 1
+    assert civ.level == 3 and moments.count("level_up") == 2
+    for _ in range(30):
+        civ.next_risk_tick = market.tick + 10
+        market.advance()
+    assert star.event_multiplier == pytest.approx(1.45, abs=0.005)
+
+
+def test_civilisation_can_destroy_itself():
+    market = make_market()
+    settle(market, "kora")
+    civ = market.start_event("intelligent_life", "kora")
+    civ.level = 2
+    civ.next_risk_tick = market.tick + 1
+    market.rng = random.Random()
+    market.rng.random = lambda: 0.0  # every roll comes up bad
+    moments = news_moments(market, 30)
+    assert ("intelligent_life", "silent") in moments
+    assert civ.id not in market.events and market.stars["kora"].multipliers == {}
+
+
+def test_flare_can_sterilise_red_dwarf_life():
+    market = make_market()
+    settle(market, "ember")
+    civ = market.start_event("intelligent_life", "ember")
+    market.rng.random = lambda: 0.0
+    market.start_event("stellar_flare", "ember")
+    assert civ.ending
+    assert ("intelligent_life", "sterilised") in [(n.event_type, n.moment) for n in market.take_event_news()]
+
+
+def test_life_migrates_or_dies_when_its_star_swells():
+    for roll, moment in ((0.0, "migrated"), (0.99, "extinct")):
+        market = make_market()
+        settle(market, "kora")
+        civ = market.start_event("intelligent_life", "kora")
+        civ.level = 2
+        market.rng.random = lambda roll=roll: roll
+        market.force_next_stage("kora")
+        moments = news_moments(market, 1)
+        assert ("intelligent_life", moment) in moments
+        settlers = [e for e in market.events.values() if e.type == "intelligent_life" and e.asset_id != "kora"]
+        if moment == "migrated":
+            assert [(s.level, s.asset_id in {"sol-nova", "ember"}) for s in settlers] == [(2, True)]
+        else:
+            assert settlers == []
+
+
+def test_spacefaring_civilisations_draw_dyson_spheres():
+    market = make_market()
+    settle(market, "kora")
+    civ = market.start_event("intelligent_life", "kora")
+    civ.level = 3
+    assert star_weight("dyson_sphere", market.stars["kora"], market) == 5
+    assert star_weight("dyson_sphere", market.stars["ember"], market) == 1

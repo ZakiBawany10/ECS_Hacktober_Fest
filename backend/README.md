@@ -151,6 +151,7 @@ by weight among those with an eligible star:
 | `coronal_collapse` | 10 | red giants and red hypergiants | 30–60% of the stage's remaining time removed |
 | `mysterious_dimming` | 10 | main-sequence stars, one at a time | 3–5 dips of −6% to −14% over 60–120 s |
 | `dyson_sphere` | 4 | main-sequence stars and giants, two building at a time | slides towards ~3% of the price over 300 s |
+| `intelligent_life` | 8 | G, K and M main-sequence stars settled for 60 s, three at a time | ×1.05, then ×1.20, then ×1.45 |
 
 Dimming and Dyson spheres are **major** events: at most 4 run at once, and a
 star can only have one. Each rolls a hidden outcome when it starts, which never
@@ -160,6 +161,13 @@ leaves the server:
   until it becomes a giant or goes supernova, which destroys the sphere. 80% are
   abandoned between 15% and 85% built, and the price rallies back within ~15 s.
   Builds pause 0–2 times either way. At least one starts by minute 8.
+- **Intelligent life (5.4):** a long-running state, so it doesn't count as a
+  major event. Every 60–90 s it may level up (60% from microbial to
+  intelligent, 50% to spacefaring); a civilisation that stays gets one more
+  roll. Levels 2–3 have a 5% chance a minute of wiping themselves out. A flare
+  on an M star with level 1–2 life sterilises it 30% of the time. When its star
+  becomes a giant, life migrates to another G, K or M star (50%) or dies out.
+  Spacefaring civilisations make their star 5× likelier to get a Dyson sphere.
 - **Mysterious dimming (5.6):** 85% dust, which clears. 15% an early Dyson
   sphere: the dips get deeper and more regular, then a sphere starts.
 

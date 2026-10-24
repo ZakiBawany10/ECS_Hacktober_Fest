@@ -125,6 +125,28 @@ EVENT_NOTES: dict[tuple[EventType, str], str] = {
     ("dyson_sphere", "destroyed"): (
         "{name} has become a {stage} and torn its Dyson sphere apart. Its light, and its price, are back."
     ),
+    ("intelligent_life", "start"): (
+        "Astronomers have detected {life} on planets around {name}, a {stage}. Markets value a living "
+        "system, so its price is climbing. Nobody knows yet if it will grow into a civilisation."
+    ),
+    ("intelligent_life", "level_up"): (
+        "The life around {name} has advanced: it is now {life}. Its price is climbing again."
+    ),
+    ("intelligent_life", "silent"): (
+        "The signals from {life} around {name} have suddenly gone silent: it seems to have destroyed itself. "
+        "Its price premium is collapsing. Make it eerie."
+    ),
+    ("intelligent_life", "sterilised"): (
+        "A stellar flare from {name} has sterilised its planets, wiping out {life}. Its price premium is gone."
+    ),
+    ("intelligent_life", "migrated"): (
+        "{name} has swollen into a {stage}, and {life} has fled its dying star for {new_home}. {new_home}'s "
+        "price is climbing as the refugees arrive."
+    ),
+    ("intelligent_life", "extinct"): (
+        "{name} has swollen into a {stage}, and {life} on its planets could not escape. It is extinct, "
+        "and its price premium is gone."
+    ),
 }
 
 EVENT_FALLBACKS: dict[tuple[EventType, str], tuple[str, str]] = {
@@ -140,6 +162,12 @@ EVENT_FALLBACKS: dict[tuple[EventType, str], tuple[str, str]] = {
     ("dyson_sphere", "abandoned"): ("{name}'s Dyson sphere abandoned", "The builders have walked away and {name}'s price is rallying."),
     ("dyson_sphere", "complete"): ("{name} fully enclosed", "The Dyson sphere around {name} is finished. Its shares are near worthless."),
     ("dyson_sphere", "destroyed"): ("{name} shatters its Dyson sphere", "{name} has become a {stage}, and its light is back."),
+    ("intelligent_life", "start"): ("Life detected around {name}", "Astronomers have found {life} around {name}, and its price is climbing."),
+    ("intelligent_life", "level_up"): ("{name}'s life evolves", "The life around {name} is now {life}."),
+    ("intelligent_life", "silent"): ("{name} goes silent", "The signals from {life} around {name} have stopped."),
+    ("intelligent_life", "sterilised"): ("Flare sterilises {name}", "A stellar flare has wiped out {life} around {name}."),
+    ("intelligent_life", "migrated"): ("Life flees {name} for {new_home}", "As {name} swells, {life} has moved to {new_home}."),
+    ("intelligent_life", "extinct"): ("Life dies out at {name}", "Nothing survived on {name}'s planets as it swelled."),
 }
 
 _HEADLINE_REQUEST = "Write a headline of at most 12 words and a body of one or two sentences."

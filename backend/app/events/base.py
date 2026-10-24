@@ -17,6 +17,7 @@ EventType = Literal[
     "coronal_collapse",
     "mysterious_dimming",
     "dyson_sphere",
+    "intelligent_life",
 ]
 
 # A multiplier this close to its target has finished easing.
@@ -78,12 +79,20 @@ class Event:
         return market.stars[self.asset_id]
 
     def report(
-        self, market: "Market", moment: str, flash: bool = False, outlet: str | None = None, **facts: str
+        self,
+        market: "Market",
+        moment: str,
+        flash: bool = False,
+        outlet: str | None = None,
+        also: list[str] | None = None,
+        **facts: str,
     ) -> None:
-        """Queue news about this event. The star's name and stage are always in the facts."""
+        """Queue news about this event. The star's name and stage are always in the facts; `also` lists
+        other stars the news is about."""
         star = self.star(market)
         facts = {"name": star.name, "stage": STAGE_LABELS[star.stage], **facts}
-        market.event_news.append(EventNews(self.type, moment, [star.id], facts, market.tick, flash, outlet))
+        asset_ids = [star.id, *(also or [])]
+        market.event_news.append(EventNews(self.type, moment, asset_ids, facts, market.tick, flash, outlet))
 
 
 @dataclass

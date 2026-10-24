@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from .. import config
 from ..lifecycle import STAGE_LABELS, next_stage
 from .base import EasingEvent, Event, EventType
+from .civ import flare_strike
 
 if TYPE_CHECKING:
     from ..market import Market, Star
@@ -36,6 +37,8 @@ class Pulse(EasingEvent):
     def start(self, market: "Market") -> None:
         self.set_target(market, self.peak, PULSE_ATTACK_TAU)
         self.report(market, "start", size=self.size)
+        if self.type == "stellar_flare":
+            flare_strike(self.star(market), market)
 
     def tick(self, market: "Market") -> bool:
         if market.tick >= self.release_tick and self.multiplier(market).target != 1.0:

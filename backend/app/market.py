@@ -8,7 +8,17 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 from . import config
-from .events import EVENT_WEIGHTS, Event, EventNews, EventType, Multiplier, create_dyson, create_event, eligible
+from .events import (
+    EVENT_WEIGHTS,
+    Event,
+    EventNews,
+    EventType,
+    Multiplier,
+    create_dyson,
+    create_event,
+    eligible,
+    star_weight,
+)
 from .events.dyson import MAX_BUILDING
 from .lifecycle import (
     DARK_STAGES,
@@ -79,6 +89,7 @@ class Star:
     multipliers: dict[str, Multiplier] = field(default_factory=dict)  # event effects on price, keyed by event id
     forecast: Forecast | None = None  # server-only: set for stars that spawned as protostars
     listed: bool = True  # False once delisted: still shown on the map, but off the exchange
+    stage_tick: int = 0  # when it entered its current stage
     shares_held: float = 0.0
     history: deque[tuple[int, float]] = field(default_factory=lambda: deque(maxlen=config.HISTORY_LENGTH))
 
@@ -190,6 +201,7 @@ class Market:
         landing_price = star.path[-1].end_price if star.path else None
         star.path = []
         star.stage = stage
+        star.stage_tick = self.tick
         if stage == "supernova":
             self._start_supernova(star)
             return
@@ -273,6 +285,7 @@ class Market:
             stage="protostar",
             ticks_left=ticks,
             forecast=forecast,
+            stage_tick=self.tick,
         )
         star.history.append((self.tick, star.price))
         self.stars[star.id] = star
@@ -314,9 +327,10 @@ class Market:
         star = self.get_star(asset_id)
         if not eligible(event_type, star, self, director):
             raise MarketError(f"A {event_type.replace('_', ' ')} can't happen to {star.name} right now")
-        return self._run(create_event(event_type, star, self))
+        return self.add_event(create_event(event_type, star, self))
 
-    def _run(self, event: Event) -> Event:
+    def add_event(self, event: Event) -> Event:
+        """Start an event the caller has already checked, such as one event leading to another."""
         self.events[event.id] = event
         if event.type == "dyson_sphere":
             self.dysons_started += 1
@@ -368,7 +382,9 @@ class Market:
             event_type: EventType = "dyson_sphere"
         else:
             event_type = self.rng.choices(types, weights=[EVENT_WEIGHTS[t] for t in types])[0]
-        return self.start_event(event_type, self.rng.choice(candidates[event_type]).id)
+        stars = candidates[event_type]
+        star = self.rng.choices(stars, weights=[star_weight(event_type, s, self) for s in stars])[0]
+        return self.start_event(event_type, star.id)
 
     def advance(self) -> TickReport:
         """Move the market on one tick and report what happened that the news should cover."""
@@ -388,7 +404,7 @@ class Market:
                 del self.events[event.id]
         for asset_id, start_value in self._follow_ups:
             origin = "It follows weeks of strange, ever-deeper dips in the star's light."
-            report.events.append(self._run(create_dyson(self.stars[asset_id], self.tick, self.rng, start_value, origin)))
+            report.events.append(self.add_event(create_dyson(self.stars[asset_id], self.tick, self.rng, start_value, origin)))
         self._follow_ups = []
         for star in list(self.stars.values()):
             if star.ticks_left is not None:
