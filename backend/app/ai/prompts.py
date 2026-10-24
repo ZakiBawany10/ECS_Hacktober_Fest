@@ -1,6 +1,7 @@
 """What Gemma is asked, the JSON it must reply with, and the templates used when it can't."""
 
-from typing import Annotated, Literal
+import re
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, StringConstraints
 
@@ -145,6 +146,42 @@ STAR_NEWS_FALLBACKS: dict[StarNews, tuple[str, str]] = {
     "forecast": ("Forecast updated for {name}", "Forecasters now expect {projection}, {revision}."),
     "delisted": ("{name} delisted", "{name}'s worthless black hole shares have been written off."),
 }
+
+
+# Star names: Gemma invents a batch at a time, kept in Market.name_pool until a star spawns.
+NAME_BATCH = 5
+NAME_PATTERN = re.compile(r"[A-Z][A-Za-z' -]{1,15}")
+NAMES_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "names": {"type": "array", "items": {"type": "string", "maxLength": 16}, "minItems": 1, "maxItems": NAME_BATCH}
+    },
+    "required": ["names"],
+}
+
+
+def names_prompt(avoid: list[str]) -> str:
+    return (
+        f"Invent {NAME_BATCH} names for newly discovered stars in a space trading game. Each should be one or "
+        "two words and at most 16 letters: varied, memorable names that sound like places, people, birds, "
+        "myths or old words. Avoid overused space words (Nova, Star, Stellar, Aether, Cosmic, Astro, Flare, "
+        "Glimmer), real astronomical names, and names from games, films or brands. "
+        f"Don't reuse any of these: {', '.join(avoid) or 'none'}."
+    )
+
+
+def valid_names(reply: dict[str, Any], avoid: list[str]) -> list[str]:
+    """The new, well-formed names in Gemma's reply, in order, without repeats."""
+    taken = {name.lower() for name in avoid}
+    names = []
+    for name in reply.get("names") or []:
+        if not isinstance(name, str):
+            continue
+        name = " ".join(name.split())
+        if NAME_PATTERN.fullmatch(name) and name.lower() not in taken:
+            names.append(name)
+            taken.add(name.lower())
+    return names
 
 
 def star_news_prompt(kind: StarNews, facts: dict[str, str]) -> str:

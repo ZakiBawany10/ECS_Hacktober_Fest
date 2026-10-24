@@ -125,5 +125,5 @@ def test_director_spawn_star_lists_and_announces(monkeypatch, fake_gemma):
     assert listed["asset"]["id"] == asset["id"]
     news = next(m for m in messages if m["type"] == "news")
     assert news["item"]["asset_ids"] == [asset["id"]]
-    assert "new protostar" in fake_gemma.prompts[-1]
+    assert any("new protostar" in prompt for prompt in fake_gemma.prompts)
     assert client.post("/director/spawn_star", json={"spectral_type": "X"}).status_code == 422

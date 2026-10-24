@@ -118,3 +118,27 @@ def test_every_event_type_has_a_note_and_fallback():
     facts = {"name": "Kora", "stage": "red giant", "size": "heavy", "next_stage": "white dwarf"}
     for event_type in EVENT_WEIGHTS:
         assert "Kora" in event_fallback(event_type, facts).headline
+
+
+def run_names_job(client, avoid):
+    named: list[list[str]] = []
+
+    async def go():
+        worker = AIWorker(client)
+        worker.request_names(avoid, named.append)
+        worker.request_names(avoid, named.append)  # ignored: a batch is already on its way
+        assert worker.queue.qsize() == 1
+        await worker.handle(worker.queue.get_nowait())
+        assert not worker.names_pending
+
+    asyncio.run(go())
+    return named
+
+
+def test_worker_collects_valid_star_names():
+    reply = {"names": ["Vireo", "  Ash   Wake ", "vireo", "Kora", "lowercase", "Way Too Long A Star Name", 7, "Q"]}
+    assert run_names_job(FakeChatClient(reply), avoid=["Kora"]) == [["Vireo", "Ash Wake"]]
+
+
+def test_worker_survives_gemma_failing_to_name_stars():
+    assert run_names_job(FakeChatClient(GemmaError("down")), avoid=[]) == []

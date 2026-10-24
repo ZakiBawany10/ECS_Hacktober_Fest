@@ -114,6 +114,10 @@ def news_out(news: News) -> NewsItem:
     )
 
 
+# Ask Gemma for more star names when fewer than this many are ready.
+NAME_POOL_LOW = 3
+
+
 def publisher(kind: NewsKind, asset_ids: list[str], t: int):
     """Return a callback that publishes a finished headline to the feed and the WebSocket."""
 
@@ -173,6 +177,9 @@ async def tick_loop() -> None:
     while True:
         await asyncio.sleep(config.TICK_SECONDS)
         report = market.advance()
+        if len(market.name_pool) < NAME_POOL_LOW:
+            taken = [star.name for star in market.stars.values()] + list(market.name_pool)
+            worker.request_names(taken, market.name_pool.extend)
         for star in report.spawned:
             await announce_spawn(star)
         for star in report.delisted:

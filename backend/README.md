@@ -36,7 +36,10 @@ Check [health](http://127.0.0.1:8000/health) or open the
 
 ## Gemma
 
-Gemma writes the news text. It never sets prices or balances. It runs locally
+Gemma writes the news text and names new stars. It never sets prices or
+balances. The worker keeps a few Gemma names ready in `Market.name_pool`, so a
+spawn never waits for the model; `FALLBACK_NAMES` in `app/spawn.py` covers it
+when Gemma is down. It runs locally
 through Ollama:
 
 ```sh
