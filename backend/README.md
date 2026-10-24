@@ -24,13 +24,21 @@ Check [health](http://127.0.0.1:8000/health) or open the
 | `app/main.py` | FastAPI app, routes, `/ws` broadcast, tick loop |
 | `app/models.py` | Request/response shapes shared with the frontend |
 | `app/market.py` | In-memory game state: stars, players, trades, net worth |
-| `app/pricing.py` | Price formula and per-tick luminosity noise |
+| `app/pricing.py` | Price formula, trading pressure and per-tick luminosity noise |
 | `app/lifecycle.py` | Luminosity bounds, stage durations and lifecycle paths |
 | `app/seed.py` | Starting stars (one main-sequence star per spectral type) |
 | `app/config.py` | Game constants; `TICK_SECONDS` env var (default 1.0) |
 
 Pricing follows `docs/main_sequence_pricing_data.md`:
 `price = 100 × (log10(L/L☉) + 5)`, with 1000 shares per star.
+
+**Trading pressure** sits on top of that as a temporary multiplier:
+`price = 100 × (log10(L/L☉) + 5) × impact`. Each trade moves `impact` by 1% per
+10k traded (up for buys, down for sells), within 0.85 to 1.15, and it eases 10%
+of the way back to 1 every tick. So a herd buying on a rumour really moves the
+price, and it drifts back once the buying stops. A trade fills at the price
+after its own impact, so an instant buy-then-sell always loses a little. The
+constants are in `app/config.py`.
 
 ## Lifecycle
 
@@ -81,7 +89,9 @@ Portfolio { player_id, nickname, cash, holdings: {asset_id: qty}, net_worth }
 
 Errors use FastAPI's `{"detail": ...}` body: 400 for a rejected trade (not
 enough cash, shares or holdings, or the star is a black hole), 404 for an unknown player/asset, 422 for an
-invalid body. Quantities may be fractional; trades fill at the current price.
+invalid body. Quantities may be fractional. A trade fills at the price after its
+own impact, so it costs slightly more than `qty × price`: spending all your cash
+at the shown price fails with "Not enough cash".
 
 `/director/*` endpoints drive the game by hand for testing and the demo. They
 have no auth. `force_stage` returns 400 if the star is already in its final

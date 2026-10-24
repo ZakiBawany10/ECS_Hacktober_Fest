@@ -16,3 +16,9 @@ TWINKLE_REVERSION = 0.05
 
 HISTORY_LENGTH = 600  # price points kept per asset (10 minutes at 1 tick/s)
 LEADERBOARD_EVERY_TICKS = 5
+
+# Trading pressure: each trade nudges a star's price multiplier, which then decays back to 1.
+# A 10k buy lifts the price by IMPACT_PER_10K (1%), and sells push it down the same way.
+IMPACT_PER_10K = 0.01
+IMPACT_CAP = 0.15  # the multiplier stays within 1 ± this
+IMPACT_DECAY = 0.1  # fraction of the gap to 1 closed each tick

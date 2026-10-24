@@ -16,7 +16,7 @@ from .lifecycle import (
     roll_duration_ticks,
     seconds_to_ticks,
 )
-from .pricing import price_from_luminosity, twinkle
+from .pricing import apply_impact, decay_impact, market_price, price_from_luminosity, twinkle
 from .seed import SEED_STARS
 
 # Tolerance for float comparisons on cash and share quantities.
@@ -41,6 +41,7 @@ class Star:
     base_L: float  # server-only: the luminosity twinkle reverts towards
     L: float
     price: float
+    impact: float = 1.0  # trading-pressure multiplier on the luminosity price; decays back to 1
     stage: Stage = "main_sequence"
     ticks_left: int | None = None  # ticks until the next stage; None means the star never evolves
     shares_held: float = 0.0
@@ -116,7 +117,7 @@ class Market:
         if stage is None:
             raise MarketError(f"{star.name} is already in its final stage")
         self._enter_stage(star, stage)
-        star.price = price_from_luminosity(star.L)
+        star.price = market_price(star.L, star.impact)
         return star
 
     def advance(self) -> None:
@@ -132,7 +133,8 @@ class Market:
                         self._enter_stage(star, stage)
             if star.stage not in DARK_STAGES:
                 star.L = twinkle(star.L, star.base_L, self.rng)
-            star.price = price_from_luminosity(star.L)
+            star.impact = decay_impact(star.impact)
+            star.price = market_price(star.L, star.impact)
             star.history.append((self.tick, star.price))
 
     def join(self, nickname: str) -> Player:
@@ -153,38 +155,46 @@ class Market:
         return star
 
     def trade(self, player_id: str, asset_id: str, side: str, qty: float) -> Trade:
-        """Fill a market order at the current price, or raise MarketError."""
+        """Fill a market order, or raise MarketError.
+
+        The trade moves the price first and fills at the moved price, so the trader pays their own
+        price impact. That makes an instant buy-then-sell lose money instead of printing it.
+        """
         player = self.get_player(player_id)
         star = self.get_star(asset_id)
         if qty <= 0:
             raise MarketError("Quantity must be positive")
         if star.stage in DARK_STAGES:
             raise MarketError(f"{star.name} is a black hole and can't be traded")
+        if side not in ("buy", "sell"):
+            raise MarketError("Side must be 'buy' or 'sell'")
 
-        cost = qty * star.price
+        impact = apply_impact(star.impact, side, qty * star.price)
+        fill_price = market_price(star.L, impact)
+        cost = qty * fill_price
         if side == "buy":
             if qty > star.shares_available + EPSILON:
                 raise MarketError(f"Only {star.shares_available:g} shares of {star.name} are available")
             if cost > player.cash + EPSILON:
-                raise MarketError("Not enough cash")
+                raise MarketError(f"Not enough cash: {qty:g} shares of {star.name} cost {cost:,.2f} at {fill_price:,.2f} each")
             player.cash = max(player.cash - cost, 0.0)
             player.holdings[star.id] = player.holdings.get(star.id, 0.0) + qty
             star.shares_held += qty
-        elif side == "sell":
+        else:
             held = player.holdings.get(star.id, 0.0)
             if qty > held + EPSILON:
                 raise MarketError(f"You only hold {held:g} shares of {star.name}")
             qty = min(qty, held)
-            player.cash += qty * star.price
+            player.cash += qty * fill_price
             remaining = held - qty
             if remaining > EPSILON:
                 player.holdings[star.id] = remaining
             else:
                 del player.holdings[star.id]
             star.shares_held = max(star.shares_held - qty, 0.0)
-        else:
-            raise MarketError("Side must be 'buy' or 'sell'")
 
+        star.impact = impact
+        star.price = fill_price
         trade = Trade(
             id=uuid.uuid4().hex,
             player_id=player.id,

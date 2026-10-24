@@ -6,7 +6,7 @@ import pytest
 from app import config
 from app.lifecycle import DARK_STAGES, MAIN_SEQUENCE_L_BOUNDS, STAGE_L_BOUNDS, generate_luminosity
 from app.market import Market, MarketError, NotFoundError
-from app.pricing import price_from_luminosity, twinkle
+from app.pricing import apply_impact, market_price, price_from_luminosity, twinkle
 
 
 def test_price_follows_log_luminosity():
@@ -40,14 +40,18 @@ def test_buy_and_sell_round_trip():
     player = market.join("zaki")
     star = market.stars["sol-nova"]
 
-    market.trade(player.id, star.id, "buy", 2.5)
-    assert player.holdings == {star.id: 2.5}
-    assert player.cash == pytest.approx(config.STARTING_CASH - 2.5 * star.price)
-    assert star.shares_available == config.SHARES_PER_STAR - 2.5
+    price_before = star.price
 
-    market.trade(player.id, star.id, "sell", 2.5)
+    buy = market.trade(player.id, star.id, "buy", 2.5)
+    assert player.holdings == {star.id: 2.5}
+    assert player.cash == pytest.approx(config.STARTING_CASH - 2.5 * buy.price)
+    assert star.shares_available == config.SHARES_PER_STAR - 2.5
+    assert buy.price > price_before  # the buy pushed the price up and filled there
+
+    sell = market.trade(player.id, star.id, "sell", 2.5)
     assert player.holdings == {}
-    assert player.cash == pytest.approx(config.STARTING_CASH)
+    assert sell.price < buy.price
+    assert player.cash < config.STARTING_CASH  # paying your own impact means a round trip costs a little
     assert star.shares_available == config.SHARES_PER_STAR
 
 
@@ -128,7 +132,7 @@ def walk_lifecycle(market: Market, star_id: str) -> list[str]:
                 continue
             low, high = STAGE_L_BOUNDS[star.stage]
             assert low <= star.base_L <= high * (1 + 1e-12)
-        assert star.price == price_from_luminosity(star.L)
+        assert star.price == market_price(star.L, star.impact)
     return stages
 
 
@@ -204,3 +208,33 @@ def test_force_next_stage_walks_the_path():
         market.force_next_stage("kestrel")
     with pytest.raises(NotFoundError):
         market.force_next_stage("nope")
+
+
+def test_trading_pressure_moves_price_and_decays():
+    market = make_market()
+    star = market.stars["sol-nova"]
+    price_before = star.price
+    for nickname in "abcdefghij":  # a herd of 10 players each buying about 9k
+        player = market.join(nickname)
+        market.trade(player.id, star.id, "buy", 9_000 / star.price)
+    assert star.impact == pytest.approx(1.09, abs=0.001)  # 10 × 1% × 9k/10k
+    assert star.price == pytest.approx(price_before * star.impact, rel=0.01)
+    for _ in range(30):
+        market.advance()
+    assert abs(star.impact - 1) < 0.01
+
+
+def test_impact_is_capped():
+    assert apply_impact(1.0, "buy", 10_000_000) == pytest.approx(1 + config.IMPACT_CAP)
+    assert apply_impact(1.0, "sell", 10_000_000) == pytest.approx(1 - config.IMPACT_CAP)
+
+
+def test_repeated_round_trips_never_make_money():
+    market = make_market()
+    player = market.join("zaki")
+    star = market.stars["kestrel"]
+    qty = 5_000 / star.price
+    for _ in range(20):
+        market.trade(player.id, star.id, "buy", qty)
+        market.trade(player.id, star.id, "sell", qty)
+    assert player.cash < config.STARTING_CASH
