@@ -29,9 +29,10 @@ export default function TradeTicket({ asset, portfolio, hasSession, disabled, bu
   const [submissionError, setSubmissionError] = useState('');
   const submittingRef = useRef(false);
   const held = asset && portfolio ? (portfolio.holdings[asset.id] ?? 0) : 0;
+  const wholeShares = Math.floor(held);
   const usingSellSlider = side === 'sell' && held >= 1 && !manualSell;
   const enteredSellQuantity = sellQuantity ?? (held > 0 ? String(Math.min(1, held)) : '');
-  const sliderQuantity = Math.min(held, Math.max(1, Number(enteredSellQuantity) || 1));
+  const sliderQuantity = Math.min(wholeShares, Math.max(1, Math.round(Number(enteredSellQuantity) || 1)));
   const quantity = side === 'buy' ? buyQuantity : usingSellSlider ? String(sliderQuantity) : enteredSellQuantity;
   const qty = Number(quantity);
   const validQuantity = quantity.trim() !== '' && Number.isFinite(qty) && qty > 0;
@@ -98,8 +99,8 @@ export default function TradeTicket({ asset, portfolio, hasSession, disabled, bu
               <label htmlFor={`${id}-sell-range`}>Shares to sell</label>
               <output htmlFor={`${id}-sell-range`}>{SHARES.format(qty)}</output>
             </div>
-            <input id={`${id}-sell-range`} type="range" min="1" max={held} step="any" value={qty} disabled={controlsDisabled} aria-valuetext={`${SHARES.format(qty)} shares`} aria-describedby={`${id}-status ${id}-estimate-note`} onChange={(event) => updateQuantity(event.target.value)} />
-            <div className="trade-range-bounds"><span>1 share</span><span>{SHARES.format(held)} available</span></div>
+            <input id={`${id}-sell-range`} type="range" min="1" max={wholeShares} step="1" value={qty} disabled={controlsDisabled} aria-valuetext={`${SHARES.format(qty)} shares`} aria-describedby={`${id}-status ${id}-estimate-note`} onChange={(event) => updateQuantity(event.target.value)} />
+            <div className="trade-range-bounds"><span>1 share</span><span>{SHARES.format(wholeShares)} whole {wholeShares === 1 ? 'share' : 'shares'}</span></div>
           </div>
         ) : (
           <label className="trade-quantity" htmlFor={`${id}-quantity`}>

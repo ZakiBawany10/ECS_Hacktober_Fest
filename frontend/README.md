@@ -43,8 +43,8 @@ clears that session after the server reports the player is missing. Balances
 refresh every five seconds and after joining, trading or reconnecting.
 
 Buy orders have quantity shortcuts for 1, 5, 10 and 25 shares alongside typed
-entry. Sell orders use a slider from 1 share to the selected star's current
-holding, including a fractional maximum. Manual entry remains available for
+entry. Sell orders use a slider in whole-share steps from 1 share to the whole
+shares held in the selected star. Manual entry remains available for
 fractional sales; holdings below 1 share use it automatically. Choosing a
 quantity does not submit an order.
 Buy shortcuts and submission are disabled when the latest quote already exceeds
