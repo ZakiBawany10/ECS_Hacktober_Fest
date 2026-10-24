@@ -2,7 +2,7 @@
 
 October 24, 2026
 
-## 1 Types of Star.
+## 1 Main Sequence.
 
 | Spectral type | $T_{\mathrm{eff}}$ (K) | $L/L_\odot$ | $M/M_\odot$ |
 |:--------------|----------------------:|------------:|------------:|
@@ -34,8 +34,40 @@ we will take logs of luminosity to get a linear scale in base 10
 
 To scale this to have all positive relative values, add 5 to the amended luminosities. This means that the smallest M stars have a relative value of 1.48.
 
-The price per share will now be $100 \times \log_{10}\left(\frac{L}{L_\odot}\right)$ !!
+$$
+P = 100 \times \left(5 + \log_{10}(L/L_\odot)\right)
+\tag{1}
+$$
+
+**Figure 1:** $P$ = Price of share, $L$ = luminosity $L_\odot$ = solar luminosity
+
+The price per share will now be:
+
+$100 \times \left(5 + \log_{10}\left(\frac{L}{L_\odot}\right)\right)$ !!
 
 I will also suggest that each star has the same number of shares associated to it. However, if scaling by mass makes more sense, then i may suggest we change that.
 
 For now, each star has 1000 shares attached to it.
+
+## 2 exotics
+
+the way i would like to add the next stages of life to the main sequence is to assign types of "Giant star" to the types of main sequence.
+
+M,K,G, become red giants F,B beecome Blue Giants B become Red Hyper Giants O become Blue Hyper Giants
+
+the values for our adjusted luminosities and therefore the price per share
+
+| Stellar type | $T_{\mathrm{eff}}$ (K) | $\log_{10}(L/L_\odot)+5$ | $M_{\mathrm{init}}/M_\odot$ |
+|:-------------|----------------------:|------------------------:|---------------------------:|
+| Red giant | 3,000 to 5,000 | 6.00 to 9.00 | 0.8 to 8 |
+| Blue giant | 10,000 to 45,000 | 7.00 to 11.00 | 3 to 70 |
+| Red hypergiant | 3,000 to 4,000 | 10.00 to 10.70 | 20 to 40 |
+| Blue hypergiant | 10,000 to 30,000 | 10.30 to 11.48 | 30 to 100 |
+
+**Table 4:** Illustrative effective temperatures, shifted logarithmic bolometric luminosities and initial masses of giant and hypergiant stars. These overlapping ranges are representative rather than strict classification boundaries.
+
+share price is of course 100 times $5 + \log_{10}(L/L_\odot)$ this stays
+
+## 3 Proto star.
+
+The way i would like this to work is that we will give the option to the user to "buy" into the star at the protostar stage. There will be news surrounding this in game. A protostar will have attached to it a constantly updating "predicted value" per share. The real value may very well be that value or it might deviate significantly depedning on market conditions or observational error.
