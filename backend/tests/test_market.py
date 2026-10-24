@@ -492,9 +492,14 @@ def test_black_hole_is_delisted_after_a_minute():
     for _ in range(seconds_to_ticks(60)):
         delisted += market.advance().delisted
     assert [star.id for star in delisted] == ["kestrel"]
-    assert "kestrel" not in market.stars
+    star = market.stars["kestrel"]  # kept for the map
+    assert not star.listed and star.ticks_left is None
     assert player.holdings == {}
     assert market.net_worth(player) == player.cash
+    with pytest.raises(MarketError, match="delisted"):
+        market.trade(player.id, "kestrel", "buy", 1)
+    assert market.advance().delisted == []  # only once
+    assert star not in market.living_stars()
 
 
 def test_protostars_dodge_events():

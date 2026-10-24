@@ -100,8 +100,10 @@ Players can trade protostars at the forecast price. The API shows a protostar's
 values appear at ignition. Protostars get news when they're discovered,
 halfway to ignition and at ignition.
 
-**Black holes** are delisted 60 s after forming: they leave `/state` and tick
-messages, and their shares are written off.
+**Black holes** are delisted 60 s after forming: they come off the exchange and
+their shares are written off, but they stay in `/state` and tick messages with
+`listed: false` so the star map can still show them. A delisted star can't be
+traded.
 
 Typical lives, from the main sequence: O 4.5–7.5 min, B 5.5–8.5 min, A and F
 10.5–15.5 min, G, K and M 12–18 min. Spawned stars add 1–1.5 min as protostars.
@@ -168,7 +170,7 @@ the browser.
 
 ```text
 Asset     { id, name, kind: "star", stage, spectral_type, mass, temperature, L,
-            price, shares_total, shares_available }
+            price, shares_total, shares_available, listed }
 stage     "protostar" | "main_sequence" | "red_giant" | "blue_giant" | "red_hypergiant"
           | "blue_hypergiant" | "supernova" | "white_dwarf" | "neutron_star"
           | "black_hole"
@@ -214,7 +216,7 @@ curl -X POST localhost:8000/director/force_stage -H 'Content-Type: application/j
 **WebSocket `/ws`** (server → client):
 
 ```json
-{"type": "tick", "t": 12, "assets": [{"id": "sol-nova", "stage": "main_sequence", "price": 500.4, "L": 1.002}]}
+{"type": "tick", "t": 12, "assets": [{"id": "sol-nova", "stage": "main_sequence", "price": 500.4, "L": 1.002, "listed": true}]}
 {"type": "leaderboard", "rows": [{"nickname": "zaki", "net_worth": 10012.5}]}
 {"type": "news", "item": {"id": "…", "t": 41, "kind": "lifecycle", "headline": "Kestrel goes supernova", "body": "…", "asset_ids": ["kestrel"], "source": "StarWire", "side": "human"}}
 {"type": "listed", "asset": {"id": "fathom", "stage": "protostar", "…": "a full Asset"}}
@@ -222,7 +224,9 @@ curl -X POST localhost:8000/director/force_stage -H 'Content-Type: application/j
 ```
 
 `listed` arrives when a star spawns, before it appears in `tick` messages.
-`delisted` arrives when a black hole leaves the market.
+`delisted` arrives when a black hole comes off the exchange. It keeps appearing
+in `tick` messages with `listed: false`; leave it off the exchange list but keep
+it on the map.
 
 `tick` is sent every tick and `leaderboard` every 5 ticks. `news` is sent when
 an item is published, usually about 1.5 s after the stage change (Gemma's

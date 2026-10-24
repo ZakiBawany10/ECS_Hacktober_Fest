@@ -77,6 +77,7 @@ class Star:
     path: list[PriceLeg] = field(default_factory=list)  # server-only: scripted price legs; L follows them
     multipliers: dict[str, Multiplier] = field(default_factory=dict)  # event effects on price, keyed by event id
     forecast: Forecast | None = None  # server-only: set for stars that spawned as protostars
+    listed: bool = True  # False once delisted: still shown on the map, but off the exchange
     shares_held: float = 0.0
     history: deque[tuple[int, float]] = field(default_factory=lambda: deque(maxlen=config.HISTORY_LENGTH))
 
@@ -290,8 +291,10 @@ class Market:
         return asset_id
 
     def _delist(self, star: Star) -> None:
-        """Remove a star from the market. Its shares are written off: they were worth nothing anyway."""
-        del self.stars[star.id]
+        """Take a star off the exchange. It stays in self.stars for the map, but its shares are written
+        off: they were worth nothing anyway."""
+        star.listed = False
+        star.ticks_left = None
         for event_id in [event.id for event in self.events.values() if event.asset_id == star.id]:
             del self.events[event_id]
         for player in self.players.values():
@@ -352,7 +355,6 @@ class Market:
                     elif star.stage in DARK_STAGES:
                         self._delist(star)
                         report.delisted.append(star)
-                        continue
                     else:
                         star.ticks_left = None
             if star.stage == "protostar" and star.forecast is not None:
@@ -424,6 +426,8 @@ class Market:
         star = self.get_star(asset_id)
         if qty <= 0:
             raise MarketError("Quantity must be positive")
+        if not star.listed:
+            raise MarketError(f"{star.name} has been delisted and can't be traded")
         if star.stage in DARK_STAGES:
             raise MarketError(f"{star.name} is a black hole and can't be traded")
         if side not in ("buy", "sell"):

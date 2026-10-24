@@ -87,6 +87,7 @@ def asset_out(star: Star) -> Asset:
         price=star.price,
         shares_total=config.SHARES_PER_STAR,
         shares_available=star.shares_available,
+        listed=star.listed,
     )
 
 
@@ -195,7 +196,9 @@ async def tick_loop() -> None:
             announce_forecast(star)
         for event in report.events:
             announce_event(event)
-        ticks = [AssetTick(id=s.id, stage=s.stage, price=s.price, L=s.L) for s in market.stars.values()]
+        ticks = [
+            AssetTick(id=s.id, stage=s.stage, price=s.price, L=s.L, listed=s.listed) for s in market.stars.values()
+        ]
         await connections.broadcast(TickMessage(t=market.tick, assets=ticks))
         if market.tick % config.LEADERBOARD_EVERY_TICKS == 0:
             await connections.broadcast(LeaderboardMessage(rows=leaderboard_out()))

@@ -53,6 +53,7 @@ class Asset(BaseModel):
     price: float
     shares_total: float
     shares_available: float
+    listed: bool  # False once delisted: show it on the map, not the exchange
 
 
 class AssetTick(BaseModel):
@@ -60,6 +61,7 @@ class AssetTick(BaseModel):
     stage: Stage
     price: float
     L: float
+    listed: bool
 
 
 class Portfolio(BaseModel):
@@ -122,7 +124,8 @@ class ListedMessage(BaseModel):
 
 
 class DelistedMessage(BaseModel):
-    """A star has left the market and won't appear in tick messages again. Its holdings are gone."""
+    """A star has left the exchange. It stays in /state and tick messages with listed: false, for the
+    map, and its holdings are gone."""
 
     type: Literal["delisted"] = "delisted"
     asset_id: str

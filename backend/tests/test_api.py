@@ -48,7 +48,7 @@ def test_history_and_websocket_tick(monkeypatch):
     with TestClient(app) as live_client, live_client.websocket_connect("/ws") as ws:
         message = ws.receive_json()
     assert message["type"] == "tick"
-    assert {"id", "stage", "price", "L"} <= message["assets"][0].keys()
+    assert {"id", "stage", "price", "L", "listed"} <= message["assets"][0].keys()
 
 
 def test_director_force_stage(monkeypatch):
@@ -129,3 +129,14 @@ def test_director_spawn_star_lists_and_announces(monkeypatch, fake_gemma):
     assert news["item"]["asset_ids"] == [asset["id"]]
     assert any("new protostar" in prompt for prompt in fake_gemma.prompts)
     assert client.post("/director/spawn_star", json={"spectral_type": "X"}).status_code == 422
+
+
+def test_delisted_star_stays_in_state_for_the_map(monkeypatch):
+    monkeypatch.setattr(main, "market", Market(random_events=False))
+    for _ in range(3):
+        main.market.force_next_stage("kestrel")
+    main.market.stars["kestrel"].ticks_left = 1
+    main.market.advance()
+    assets = {asset["id"]: asset for asset in client.get("/state").json()["assets"]}
+    assert assets["kestrel"]["listed"] is False and assets["kestrel"]["stage"] == "black_hole"
+    assert assets["sol-nova"]["listed"] is True
