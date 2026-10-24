@@ -28,7 +28,7 @@ Use Python 3.11+. From the repository root on Windows:
 
 ```powershell
 python -m venv .venv
-.\.venv\Scripts\python -m pip install -r backend/requirements.txt
+.\.venv\Scripts\python -m pip install -r backend/requirements-dev.txt
 .\.venv\Scripts\python -m uvicorn app.main:app --app-dir backend --reload
 ```
 
@@ -36,3 +36,4 @@ On macOS/Linux, use `.venv/bin/python` instead.
 
 Health endpoint: `http://localhost:8000/health`.
 API documentation: `http://localhost:8000/docs`.
+Tests: `cd backend`, then `..\.venv\Scripts\python -m pytest`.
