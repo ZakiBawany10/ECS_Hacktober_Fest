@@ -52,7 +52,7 @@ export default function App() {
         {directorEnabled && <DemoControls key={selectedAsset?.id} asset={selectedAsset} connected={status === 'live'} />}
         <div className="terminal-layout">
           <MarketList assets={assets} selectedAssetId={selectedAsset?.id} selectedPlaceholder={selectedPlaceholder} onSelect={selectAsset} onSelectPlaceholder={setSelectedPlaceholder} />
-          <NewsFeed items={market?.news} onSelectAsset={selectAsset} />
+          <NewsFeed items={market?.news} assets={assets} status={status} error={market?.newsError} onRetry={retry} onSelectAsset={selectAsset} />
           <StarDetails asset={selectedAsset}>
             <TradeTicket key={selectedAsset?.id ?? 'empty'} asset={selectedAsset} portfolio={session.portfolio} hasSession={session.hasSession} busy={session.busy === 'trade'} disabled={status !== 'live' || session.stale || session.busy !== null} onTrade={placeOrder} feedback={orderAssetId === selectedAsset?.id ? session.error ?? session.notice : null} feedbackError={Boolean(session.error)} />
           </StarDetails>

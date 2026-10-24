@@ -19,6 +19,7 @@ function snapshot(t = 10, price = 500) {
       shares_total: 1000, shares_available: 1000,
     }],
     leaderboard: [],
+    news: [],
   });
 }
 
@@ -33,7 +34,8 @@ test('snapshot uses actual backend metadata and starts without a fabricated pric
   const asset = state.market.assets[0];
   assert.equal(state.market.tick, 10);
   assert.equal(state.market.updatedAt, 1234);
-  assert.equal(state.market.news, undefined);
+  assert.deepEqual(state.market.news, []);
+  assert.equal(state.market.newsError, undefined);
   assert.equal(asset.symbol, 'real-server-id');
   assert.equal(asset.stage, 'main_sequence');
   assert.equal(asset.classification, 'Main sequence');

@@ -1,6 +1,7 @@
 import { buildCandles, mergePricePoints } from './candles.ts';
 import type { PricePoint } from './candles.ts';
-import type { MarketView, StarAsset, StarCategory } from './types.ts';
+import { mergeNewsItems, parseNewsItem, parseNewsSnapshot } from './news.ts';
+import type { MarketView, NewsHeadline, StarAsset, StarCategory } from './types.ts';
 
 const stages = {
   main_sequence: { label: 'Main sequence', category: 'Main sequence' },
@@ -34,6 +35,8 @@ export interface BackendAsset {
 export interface BackendSnapshot {
   t: number;
   assets: BackendAsset[];
+  news?: NewsHeadline[];
+  newsError?: string;
 }
 
 export interface BackendTick {
@@ -41,6 +44,13 @@ export interface BackendTick {
   t: number;
   assets: Array<Pick<BackendAsset, 'id' | 'stage' | 'price' | 'L'>>;
 }
+
+export interface BackendNewsMessage {
+  type: 'news';
+  item: NewsHeadline;
+}
+
+export type BackendMarketMessage = BackendTick | BackendNewsMessage;
 
 export interface LiveMarketState {
   market: MarketView;
@@ -119,14 +129,22 @@ export function parseSnapshot(value: unknown): BackendSnapshot {
         shares_available: number(asset.shares_available, 'available shares'),
       };
     }),
+    ...parseNewsSnapshot(snapshot.news),
   };
 }
 
-/** Leaderboard and other messages are outside this read-only market interface. */
+/** Compatibility helper for consumers interested only in stock ticks. */
 export function parseTickMessage(value: unknown): BackendTick | null {
   const message = record(value, 'market message');
   if (message.type !== 'tick') return null;
   return { type: 'tick', t: tick(message.t), assets: uniqueAssets(message.assets, parseAssetTick) };
+}
+
+/** Ignore unrelated protocol messages while validating both supported streams. */
+export function parseMarketMessage(value: unknown): BackendMarketMessage | null {
+  const message = record(value, 'market message');
+  if (message.type === 'news') return { type: 'news', item: parseNewsItem(message.item) };
+  return parseTickMessage(message);
 }
 
 export function parseHistory(value: unknown): PricePoint[] {
@@ -172,7 +190,35 @@ export function createMarketState(snapshot: BackendSnapshot, receivedAt = Date.n
       history: buildCandles(points),
     };
   });
-  return { market: { assets, tick: snapshot.t, updatedAt: receivedAt }, pointsByAsset, snapshotTick: snapshot.t };
+  return {
+    market: {
+      assets, tick: snapshot.t, updatedAt: receivedAt,
+      news: snapshot.news === undefined ? undefined : mergeNewsItems([], [...snapshot.news].reverse()),
+      newsError: snapshot.newsError,
+    },
+    pointsByAsset,
+    snapshotTick: snapshot.t,
+  };
+}
+
+/** News has its own event tick and must never advance the market clock or prices. */
+export function applyMarketMessage(
+  state: LiveMarketState,
+  message: BackendMarketMessage,
+  receivedAt = Date.now(),
+): LiveMarketState {
+  if (message.type === 'tick') return applyMarketTick(state, message, receivedAt);
+  const news = mergeNewsItems(state.market.news ?? [], [message.item]);
+  if (state.market.news?.length === news.length && news.every((item, index) => item === state.market.news?.[index])) {
+    return state;
+  }
+  return {
+    ...state,
+    market: {
+      ...state.market,
+      news,
+    },
+  };
 }
 
 /** Ignore duplicate/out-of-order frames so prices and history never move backwards. */

@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  applyMarketTick,
+  applyMarketMessage,
   createMarketState,
   mergeAssetHistory,
   parseHistory,
   parseSnapshot,
-  parseTickMessage,
+  parseMarketMessage,
 } from './backend.ts';
-import type { BackendTick, LiveMarketState } from './backend.ts';
+import type { BackendMarketMessage, LiveMarketState } from './backend.ts';
 import type { MarketConnectionStatus, MarketView } from './types.ts';
 
 const API_PREFIX = import.meta.env.DEV ? '/api' : '';
@@ -62,7 +62,8 @@ export function useLiveMarket(): {
       let socket: WebSocket | undefined;
       let closed = false;
       let state: LiveMarketState | undefined;
-      let pending: BackendTick[] = [];
+      let pending: BackendMarketMessage[] = [];
+      let pendingNewsError: string | undefined;
       let openTimeout: number | undefined;
       let idleTimeout: number | undefined;
 
@@ -109,9 +110,11 @@ export function useLiveMarket(): {
           const snapshot = parseSnapshot(await requestJson('/state', controller.signal));
           if (!active || closed) return;
           let next = createMarketState(snapshot);
-          // The socket is already open: preserve ticks received during the HTTP request.
-          for (const message of pending) next = applyMarketTick(next, message);
+          // Preserve both ticks and news received while the HTTP snapshot was loading.
+          for (const message of pending) next = applyMarketMessage(next, message);
+          if (pendingNewsError) next = { ...next, market: { ...next.market, newsError: pendingNewsError } };
           pending = [];
+          pendingNewsError = undefined;
           publish(next);
           watchForUpdates();
           hasLoaded.current = true;
@@ -154,17 +157,29 @@ export function useLiveMarket(): {
           if (!active || closed) return;
           try {
             if (typeof event.data !== 'string') throw new Error('The market server sent an invalid message.');
-            const message = parseTickMessage(JSON.parse(event.data));
+            const data: unknown = JSON.parse(event.data);
+            const newsMessage = data !== null && typeof data === 'object' && 'type' in data && data.type === 'news';
+            let message: BackendMarketMessage | null;
+            try {
+              message = parseMarketMessage(data);
+            } catch (newsError) {
+              if (!newsMessage) throw newsError;
+              // A bad headline must not disconnect otherwise healthy prices and trading.
+              const diagnostic = 'A news update could not be read. Reload news to catch up.';
+              if (state) publish({ ...state, market: { ...state.market, newsError: diagnostic } });
+              else pendingNewsError = diagnostic;
+              return;
+            }
             if (!message) return;
             if (state) {
-              const next = applyMarketTick(state, message);
+              const next = applyMarketMessage(state, message);
               if (next !== state) {
                 publish(next);
-                watchForUpdates();
+                if (message.type === 'tick') watchForUpdates();
               }
             } else {
               pending.push(message);
-              watchForUpdates();
+              if (message.type === 'tick') watchForUpdates();
               if (pending.length > 600) throw new Error('Market synchronisation took too long.');
             }
           } catch (messageError) {

@@ -31,21 +31,21 @@ export interface StarAsset {
   signal?: string;
 }
 
-export type NewsCategory = 'Breaking' | 'Observation' | 'Signal' | 'Market';
+export type NewsKind = 'lifecycle' | 'event' | 'rumour' | 'system';
 
 export interface NewsHeadline {
   id: string;
-  timestamp: number;
-  category: NewsCategory;
+  tick: number;
+  kind: NewsKind;
   headline: string;
   body: string;
-  assetId: string;
-  impact: 'positive' | 'negative' | 'neutral';
+  assetIds: string[];
 }
 
 export interface MarketView {
   assets: StarAsset[];
   news?: NewsHeadline[];
+  newsError?: string | null;
   updatedAt: number;
   tick: number;
 }

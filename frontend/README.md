@@ -9,9 +9,19 @@ data. Selection stays on the same star while rankings change. Price changes
 are absolute CR differences from the previous received tick; the initial
 snapshot has no comparison baseline.
 
-News and star insights still use literal placeholder labels because the
-backend does not provide them. Prices, balances and holdings come from the
-server; no generated prices, dates or headlines are included.
+The news column loads recent headlines from `/state` and receives new ones over
+the WebSocket. Headlines and bodies come from the backend (Gemma or its server
+fallback), with the real event tick and links to every related star. The
+frontend does not invent headlines, wall-clock dates or price impacts. Star
+insights still use a placeholder because the backend does not provide them.
+
+News is shown newest event tick first and limited to 50 items. Reconnects load a
+fresh snapshot; buffered live news is merged by ID so overlapping snapshots
+do not duplicate stories. Headlines can arrive after later price ticks because
+the model writes asynchronously. Expanding a story stays attached to its ID as
+new stories arrive. Events includes lifecycle changes and events; Rumours shows
+rumours. The current backend publishes lifecycle news only. Empty feeds show a
+real empty state, and malformed news does not disconnect working prices.
 
 Players can join with a nickname, buy and sell fractional shares, and see cash,
 net worth and holdings. The browser remembers the player ID; a server restart
@@ -59,8 +69,11 @@ and `npm`. If PowerShell blocks `npm.ps1`, use `npm.cmd` in place of `npm`.
 - `src/market/backend.ts` validates backend messages and maps them into frontend
   view models. Keep server field names at this boundary.
 - `src/market/useLiveMarket.ts` loads `GET /state`, then each asset's
-  `GET /assets/{id}/history`, and consumes tick messages from `/ws`. It opens the
-  socket first and buffers ticks while the snapshot loads.
+  `GET /assets/{id}/history`, and consumes tick/news messages from `/ws`. It opens
+  the socket first and buffers both kinds while the snapshot loads.
+- `src/market/news.ts` validates `{id, t, kind, headline, body, asset_ids}` from
+  the backend and maintains bounded, deduplicated news. News ticks are event
+  ticks and never advance the market clock or price history.
 - `src/market/candles.ts` builds OHLC candles from the actual tick/price samples,
   grouped into 10 simulation ticks per candle. The chart uses tick numbers,
   preserves gaps, and does not invent timestamps or volume.
@@ -70,8 +83,9 @@ and `npm`. If PowerShell blocks `npm.ps1`, use `npm.cmd` in place of `npm`.
   identity and request ordering; `usePlayerSession.ts` handles polling and
   reconnects. The server remains responsible for balances and fills.
 - `tests/` covers validation, snapshot/tick/history merging, server restart
-  handling, candle aggregation, and player/order recovery. The stage compatibility
-  regression reads the backend's actual stage definitions. Tests use Node's
+  handling, candle aggregation, player/order recovery, and news ordering/replay.
+  Compatibility regressions read the backend's actual stage and news-kind
+  definitions. Tests use Node's
   built-in runner; no extra test dependency is needed.
 
 ## Demo controls
@@ -93,11 +107,9 @@ These remain backend work; this frontend change does not alter server code:
 - Consider returning a trade receipt alongside the portfolio, including actual
   filled quantity, unit price and total. The frontend currently confirms an
   order and shows the returned balance without inventing an execution price.
-- Agree and implement the latest supernova price curves and remnant paths in
-  `docs/Main_sequence_pricing_data(1).md`. They differ from the current lifecycle
-  implementation; the frontend displays the stage/price received from the server.
-- News still needs a small agreed snapshot/message shape before connecting the
-  middle column.
+- The news contract is now connected. Future event/rumour producers can publish
+  the same `NewsItem` shape; current filters already support their kinds. The
+  frontend displays lifecycle and price data received from the server.
 
 Vite proxies `/api/*` to `http://127.0.0.1:8000/*` and `/ws` to the backend
 WebSocket. Production hosting must route `/state`, `/assets/*`, `/join`, `/trade`,
