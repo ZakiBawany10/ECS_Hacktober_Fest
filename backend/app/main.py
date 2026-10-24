@@ -6,24 +6,36 @@ from pydantic import BaseModel
 
 from . import config
 from .ai.client import GemmaClient
-from .ai.prompts import Headline, event_fallback, event_prompt
+from .ai.prompts import (
+    SPECTRAL_LOOKS,
+    Headline,
+    event_fallback,
+    event_prompt,
+    star_news_fallback,
+    star_news_prompt,
+)
 from .ai.worker import AIWorker
 from .events import Event
 from .lifecycle import STAGE_LABELS
 from .market import Market, MarketError, News, NewsKind, NotFoundError, Player, StageChange, Star
+from .pricing import price_from_luminosity
+from .spawn import projected_profile
 from .models import (
     Asset,
     AssetTick,
+    DelistedMessage,
     FireEventRequest,
     ForceStageRequest,
     JoinRequest,
     JoinResponse,
     LeaderboardMessage,
     LeaderboardRow,
+    ListedMessage,
     NewsItem,
     NewsMessage,
     Portfolio,
     PricePoint,
+    SpawnStarRequest,
     StateSnapshot,
     TickMessage,
     TradeRequest,
@@ -53,15 +65,23 @@ class ConnectionManager:
 connections = ConnectionManager()
 
 
+def public_profile(star: Star) -> tuple[str, float, float]:
+    """Spectral type, mass and temperature as players see them: a protostar shows only its forecast."""
+    if star.stage == "protostar":
+        return projected_profile(price_from_luminosity(star.L))
+    return star.spectral_type, star.mass, star.temperature
+
+
 def asset_out(star: Star) -> Asset:
+    spectral_type, mass, temperature = public_profile(star)
     return Asset(
         id=star.id,
         name=star.name,
         kind="star",
         stage=star.stage,
-        spectral_type=star.spectral_type,
-        mass=star.mass,
-        temperature=star.temperature,
+        spectral_type=spectral_type,
+        mass=mass,
+        temperature=temperature,
         L=star.L,
         price=star.price,
         shares_total=config.SHARES_PER_STAR,
@@ -107,7 +127,39 @@ def publisher(kind: NewsKind, asset_ids: list[str], t: int):
 def announce_stage_change(change: StageChange) -> None:
     star = market.get_star(change.asset_id)
     publish = publisher("lifecycle", [star.id], change.t)
-    worker.request_stage_headline(star.name, star.spectral_type, change.old_stage, change.new_stage, publish)
+    worker.request_stage_headline(
+        star.name, star.spectral_type, change.old_stage, change.new_stage, publish, note=change.note
+    )
+
+
+def projection(star: Star) -> str:
+    return SPECTRAL_LOOKS[public_profile(star)[0]]
+
+
+async def announce_spawn(star: Star) -> None:
+    await connections.broadcast(ListedMessage(asset=asset_out(star)))
+    facts = {"name": star.name, "projection": projection(star)}
+    publish = publisher("lifecycle", [star.id], market.tick)
+    worker.request_headline(star_news_prompt("discovery", facts), star_news_fallback("discovery", facts), publish)
+
+
+def announce_forecast(star: Star) -> None:
+    assert star.forecast is not None
+    change = price_from_luminosity(star.L) / star.forecast.first_price - 1
+    if abs(change) < 0.05:
+        revision = "much as first thought"
+    else:
+        revision = "brighter than first thought" if change > 0 else "dimmer than first thought"
+    facts = {"name": star.name, "projection": projection(star), "revision": revision}
+    publish = publisher("lifecycle", [star.id], market.tick)
+    worker.request_headline(star_news_prompt("forecast", facts), star_news_fallback("forecast", facts), publish)
+
+
+async def announce_delisting(star: Star) -> None:
+    await connections.broadcast(DelistedMessage(asset_id=star.id))
+    facts = {"name": star.name}
+    publish = publisher("lifecycle", [star.id], market.tick)
+    worker.request_headline(star_news_prompt("delisted", facts), star_news_fallback("delisted", facts), publish)
 
 
 def announce_event(event: Event) -> None:
@@ -121,8 +173,14 @@ async def tick_loop() -> None:
     while True:
         await asyncio.sleep(config.TICK_SECONDS)
         report = market.advance()
+        for star in report.spawned:
+            await announce_spawn(star)
+        for star in report.delisted:
+            await announce_delisting(star)
         for change in report.stage_changes:
             announce_stage_change(change)
+        for star in report.forecast_updates:
+            announce_forecast(star)
         for event in report.events:
             announce_event(event)
         ticks = [AssetTick(id=s.id, stage=s.stage, price=s.price, L=s.L) for s in market.stars.values()]
@@ -200,13 +258,20 @@ async def trade(request: TradeRequest) -> Portfolio:
 @app.post("/director/force_stage")
 async def force_stage(request: ForceStageRequest) -> Asset:
     try:
-        old_stage = market.get_star(request.asset_id).stage
-        star = market.force_next_stage(request.asset_id)
+        change = market.force_next_stage(request.asset_id)
     except NotFoundError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
     except MarketError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
-    announce_stage_change(StageChange(star.id, old_stage, star.stage, market.tick))
+    announce_stage_change(change)
+    return asset_out(market.get_star(change.asset_id))
+
+
+@app.post("/director/spawn_star")
+async def spawn_star(request: SpawnStarRequest) -> Asset:
+    """Spawn a protostar now, ignoring the limit on living stars."""
+    star = market.spawn_star(request.spectral_type)
+    await announce_spawn(star)
     return asset_out(star)
 
 

@@ -1,5 +1,6 @@
 import math
 import random
+import re
 import time
 import uuid
 from collections import deque
@@ -13,6 +14,7 @@ from .lifecycle import (
     DECLINE_SECONDS,
     DECLINE_STAGES,
     MAIN_SEQUENCE_L_BOUNDS,
+    REMNANT_STAGES,
     STAGE_L_BOUNDS,
     SUPERNOVA_DROP_SECONDS,
     SUPERNOVA_FADE,
@@ -35,6 +37,15 @@ from .pricing import (
     twinkle,
 )
 from .seed import SEED_STARS
+from .spawn import (
+    FALLBACK_NAMES,
+    MAIN_SEQUENCE_MASS_BOUNDS,
+    MAIN_SEQUENCE_TEMPERATURE_BOUNDS,
+    SPAWN_TYPES,
+    Forecast,
+    ignition_note,
+    roll_forecast,
+)
 
 # Tolerance for float comparisons on cash and share quantities.
 EPSILON = 1e-9
@@ -65,6 +76,7 @@ class Star:
     ticks_left: int | None = None  # ticks until the next stage; None means the star never evolves
     path: list[PriceLeg] = field(default_factory=list)  # server-only: scripted price legs; L follows them
     multipliers: dict[str, Multiplier] = field(default_factory=dict)  # event effects on price, keyed by event id
+    forecast: Forecast | None = None  # server-only: set for stars that spawned as protostars
     shares_held: float = 0.0
     history: deque[tuple[int, float]] = field(default_factory=lambda: deque(maxlen=config.HISTORY_LENGTH))
 
@@ -87,6 +99,7 @@ class StageChange:
     old_stage: Stage
     new_stage: Stage
     t: int
+    note: str = ""  # extra context for the news, such as how a protostar's forecast turned out
 
 
 @dataclass
@@ -95,6 +108,9 @@ class TickReport:
 
     stage_changes: list[StageChange] = field(default_factory=list)
     events: list[Event] = field(default_factory=list)
+    spawned: list[Star] = field(default_factory=list)
+    forecast_updates: list[Star] = field(default_factory=list)  # protostars halfway to ignition
+    delisted: list[Star] = field(default_factory=list)
 
 
 @dataclass
@@ -131,7 +147,7 @@ class Market:
     """In-memory, authoritative game state. Not thread-safe: call it from one event loop."""
 
     def __init__(self, rng: random.Random | None = None, random_events: bool = True) -> None:
-        """random_events=False stops the scheduler, for tests; start_event still works."""
+        """random_events=False stops random events and spawns, for tests; start_event and spawn_star still work."""
         self.rng = rng or random.Random()
         self.tick = 0
         self.stars: dict[str, Star] = {}
@@ -139,6 +155,7 @@ class Market:
         self.trades: list[Trade] = []
         self.news: deque[News] = deque(maxlen=config.NEWS_LENGTH)
         self.events: dict[str, Event] = {}
+        self.name_pool: deque[str] = deque()  # names for new stars, filled by Gemma; FALLBACK_NAMES otherwise
         for seed in SEED_STARS:
             L = generate_luminosity(MAIN_SEQUENCE_L_BOUNDS[seed["spectral_type"]], self.rng)
             star = Star(
@@ -157,6 +174,7 @@ class Market:
             star.history.append((self.tick, star.price))
             self.stars[star.id] = star
         self.next_event_tick = self._roll_next_event_tick() if random_events else None
+        self.next_spawn_tick = self._roll_next_spawn_tick() if random_events else None
 
     def _enter_stage(self, star: Star, stage: Stage) -> None:
         # A star leaving mid-path, such as a supernova forced early, lands where its path was heading.
@@ -169,6 +187,9 @@ class Market:
         star.ticks_left = roll_duration_ticks(stage, star.spectral_type, self.rng)
         if stage in DARK_STAGES:
             star.base_L = star.L = 0.0
+        elif stage == "main_sequence":
+            assert star.forecast is not None, "only protostars enter the main sequence"
+            star.base_L = star.L = star.forecast.true_L  # ignition: the true value is revealed
         elif landing_price is not None:
             star.base_L = star.L = luminosity_from_price(landing_price)
         else:
@@ -202,15 +223,77 @@ class Market:
             tick, start_price = end_tick, end_price
         star.L = luminosity_from_price(path_price(star.path, self.tick))
 
-    def force_next_stage(self, asset_id: str) -> Star:
+    def _change_stage(self, star: Star, stage: Stage) -> StageChange:
+        change = StageChange(star.id, star.stage, stage, self.tick)
+        self._enter_stage(star, stage)
+        if change.old_stage == "protostar" and star.forecast is not None:
+            change.note = ignition_note(star.forecast)
+        return change
+
+    def force_next_stage(self, asset_id: str) -> StageChange:
         """Move a star to its next stage now, for testing and the demo."""
         star = self.get_star(asset_id)
         stage = next_stage(star.stage, star.spectral_type)
         if stage is None:
             raise MarketError(f"{star.name} is already in its final stage")
-        self._enter_stage(star, stage)
+        change = self._change_stage(star, stage)
         star.price = star.priced_at(star.impact)
+        return change
+
+    def living_stars(self) -> list[Star]:
+        return [star for star in self.stars.values() if star.stage not in REMNANT_STAGES]
+
+    def spawn_star(self, spectral_type: str | None = None) -> Star:
+        """List a new protostar. Its spectral type and true future are hidden until it ignites."""
+        spectral_type = spectral_type or self.rng.choice(SPAWN_TYPES)
+        name = self._new_name()
+        ticks = roll_duration_ticks("protostar", spectral_type, self.rng)
+        assert ticks is not None
+        true_L = generate_luminosity(MAIN_SEQUENCE_L_BOUNDS[spectral_type], self.rng)
+        forecast = roll_forecast(true_L, self.tick, self.tick + ticks, self.rng)
+        L = luminosity_from_price(forecast.predicted_price(self.tick, self.rng))
+        star = Star(
+            id=self._new_id(name),
+            name=name,
+            spectral_type=spectral_type,
+            mass=round(self.rng.uniform(*MAIN_SEQUENCE_MASS_BOUNDS[spectral_type]), 2),
+            temperature=round(self.rng.uniform(*MAIN_SEQUENCE_TEMPERATURE_BOUNDS[spectral_type]), -2),
+            base_L=L,
+            L=L,
+            price=price_from_luminosity(L),
+            stage="protostar",
+            ticks_left=ticks,
+            forecast=forecast,
+        )
+        star.history.append((self.tick, star.price))
+        self.stars[star.id] = star
         return star
+
+    def _new_name(self) -> str:
+        taken = {star.name.lower() for star in self.stars.values()}
+        while self.name_pool:
+            name = self.name_pool.popleft()
+            if name.lower() not in taken:
+                return name
+        unused = [name for name in FALLBACK_NAMES if name.lower() not in taken]
+        if unused:
+            return self.rng.choice(unused)
+        return f"Nova {self.tick}"
+
+    def _new_id(self, name: str) -> str:
+        base = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "star"
+        asset_id, n = base, 2
+        while asset_id in self.stars:
+            asset_id, n = f"{base}-{n}", n + 1
+        return asset_id
+
+    def _delist(self, star: Star) -> None:
+        """Remove a star from the market. Its shares are written off: they were worth nothing anyway."""
+        del self.stars[star.id]
+        for event_id in [event.id for event in self.events.values() if event.asset_id == star.id]:
+            del self.events[event_id]
+        for player in self.players.values():
+            player.holdings.pop(star.id, None)
 
     def start_event(self, event_type: EventType, asset_id: str) -> Event:
         """Start an event on a star now, or raise MarketError if it can't happen to that star."""
@@ -226,6 +309,9 @@ class Market:
         """Events arrive as a Poisson process: exponential gaps averaging EVENT_MEAN_GAP_SECONDS."""
         return self.tick + seconds_to_ticks(self.rng.expovariate(1 / config.EVENT_MEAN_GAP_SECONDS))
 
+    def _roll_next_spawn_tick(self) -> int:
+        return self.tick + seconds_to_ticks(self.rng.expovariate(1 / config.SPAWN_MEAN_GAP_SECONDS))
+
     def _start_random_event(self) -> Event | None:
         """Pick a type by weight among those with an eligible star, then one of those stars at random."""
         candidates = {
@@ -239,7 +325,7 @@ class Market:
         return self.start_event(event_type, self.rng.choice(candidates[event_type]).id)
 
     def advance(self) -> TickReport:
-        """Move the market on one tick and report the stage changes and new events."""
+        """Move the market on one tick and report what happened that the news should cover."""
         self.tick += 1
         report = TickReport()
         if self.next_event_tick is not None and self.tick >= self.next_event_tick:
@@ -247,20 +333,31 @@ class Market:
             if event is not None:
                 report.events.append(event)
             self.next_event_tick = self._roll_next_event_tick()
+        if self.next_spawn_tick is not None and self.tick >= self.next_spawn_tick:
+            if len(self.living_stars()) < config.MAX_LIVING_STARS:
+                report.spawned.append(self.spawn_star())
+            self.next_spawn_tick = self._roll_next_spawn_tick()
         for event in list(self.events.values()):
             if event.tick(self.stars[event.asset_id], self.tick):
                 del self.events[event.id]
-        for star in self.stars.values():
+        for star in list(self.stars.values()):
             if star.ticks_left is not None:
                 star.ticks_left -= 1
                 if star.ticks_left <= 0:
                     stage = next_stage(star.stage, star.spectral_type)
-                    if stage is None:
-                        star.ticks_left = None
+                    if stage is not None:
+                        report.stage_changes.append(self._change_stage(star, stage))
+                    elif star.stage in DARK_STAGES:
+                        self._delist(star)
+                        report.delisted.append(star)
+                        continue
                     else:
-                        report.stage_changes.append(StageChange(star.id, star.stage, stage, self.tick))
-                        self._enter_stage(star, stage)
-            if star.path:
+                        star.ticks_left = None
+            if star.stage == "protostar" and star.forecast is not None:
+                star.L = luminosity_from_price(star.forecast.predicted_price(self.tick, self.rng))
+                if self.tick == star.forecast.midpoint_tick:
+                    report.forecast_updates.append(star)
+            elif star.path:
                 star.L = luminosity_from_price(path_price(star.path, self.tick))
                 if self.tick >= star.path[-1].end_tick:
                     star.base_L = star.L

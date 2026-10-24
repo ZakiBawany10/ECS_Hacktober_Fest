@@ -103,7 +103,7 @@ class CoronalCollapse(Event):
 
 
 def eligible(event_type: EventType, star: "Star") -> bool:
-    if star.stage in DARK_STAGES:
+    if star.stage in DARK_STAGES or star.stage == "protostar":
         return False
     if event_type == "stellar_flare":
         return star.stage == "main_sequence"

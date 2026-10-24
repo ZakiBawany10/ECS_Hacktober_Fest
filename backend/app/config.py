@@ -19,6 +19,10 @@ LEADERBOARD_EVERY_TICKS = 5
 # Events start at random, on average this often (section 5.0.1 of the pricing doc says 30 s; shortened
 # for a busier game). Event types, weights and effects are in app/events.py.
 EVENT_MEAN_GAP_SECONDS = 20.0
+# New stars spawn as protostars on average this often, while fewer than MAX_LIVING_STARS are alive.
+# Remnants (white dwarfs, neutron stars, black holes) don't count; black holes are delisted after 60 s.
+SPAWN_MEAN_GAP_SECONDS = 50.0
+MAX_LIVING_STARS = 20
 NEWS_LENGTH = 50  # news items kept for /state, so late joiners can catch up
 
 # Trading pressure: each trade nudges a star's price multiplier, which then decays back to 1.

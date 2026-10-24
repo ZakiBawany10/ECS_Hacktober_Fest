@@ -28,6 +28,7 @@ Check [health](http://127.0.0.1:8000/health) or open the
 | `app/lifecycle.py` | Luminosity bounds, stage durations and lifecycle paths |
 | `app/events.py` | Price-moving events: types, weights, effects and eligibility |
 | `app/seed.py` | Starting stars (one main-sequence star per spectral type) |
+| `app/spawn.py` | New stars: protostar forecasts, birth values and fallback names |
 | `app/config.py` | Game constants and env vars |
 | `app/ai/client.py` | Calls Gemma through Ollama's chat API with a JSON schema |
 | `app/ai/prompts.py` | Prompts, reply schemas and template fallbacks |
@@ -78,11 +79,29 @@ the twinkle's mean reversion. A black hole has no light: its L and price sit at
 decides the path (sections 2 and 4 of the pricing doc); mass is display only:
 
 ```text
-O        main_sequence → blue_hypergiant → supernova → black_hole
-B        main_sequence → red_hypergiant → supernova → black_hole
-A, F     main_sequence → blue_giant → supernova → neutron_star
-G, K, M  main_sequence → red_giant → white_dwarf
+O        protostar → main_sequence → blue_hypergiant → supernova → black_hole
+B        protostar → main_sequence → red_hypergiant → supernova → black_hole
+A, F     protostar → main_sequence → blue_giant → supernova → neutron_star
+G, K, M  protostar → main_sequence → red_giant → white_dwarf
 ```
+
+**New stars** spawn as protostars on average every 50 s while fewer than 20
+stars are alive (remnants don't count), with every spectral type equally
+likely. The 7 seeded stars start on the main sequence. A protostar lasts
+60–90 s. Its true type and main-sequence brightness are rolled when it spawns
+and kept on the server (section 3 of the pricing doc). Its price is a forecast
+of its main-sequence price, which wobbles and narrows towards ignition but is
+20–40% off 30% of the time. At ignition the price jumps to the true value.
+Players can trade protostars at the forecast price. The API shows a protostar's
+*projected* spectral type, mass and temperature, so it can change, and the true
+values appear at ignition. Protostars get news when they're discovered,
+halfway to ignition and at ignition.
+
+**Black holes** are delisted 60 s after forming: they leave `/state` and tick
+messages, and their shares are written off.
+
+Typical lives, from the main sequence: O 4.5–7.5 min, B 5.5–8.5 min, A and F
+10.5–15.5 min, G, K and M 12–18 min. Spawned stars add 1–1.5 min as protostars.
 
 Giant and hypergiant bounds come from Table 4 of the pricing doc, except that a
 hypergiant's lower bound is never below the top of its main-sequence range, so
@@ -142,11 +161,12 @@ the browser.
 | POST | `/trade` | `{player_id, asset_id, side: "buy"\|"sell", qty}` | `Portfolio` |
 | POST | `/director/force_stage` | `{asset_id}` | `Asset` after moving it to its next stage |
 | POST | `/director/fire_event` | `{type, asset_id}` | `Asset` after starting the event on it |
+| POST | `/director/spawn_star` | `{spectral_type?}` | `Asset` of a new protostar (ignores the star limit) |
 
 ```text
 Asset     { id, name, kind: "star", stage, spectral_type, mass, temperature, L,
             price, shares_total, shares_available }
-stage     "main_sequence" | "red_giant" | "blue_giant" | "red_hypergiant"
+stage     "protostar" | "main_sequence" | "red_giant" | "blue_giant" | "red_hypergiant"
           | "blue_hypergiant" | "supernova" | "white_dwarf" | "neutron_star"
           | "black_hole"
 Portfolio { player_id, nickname, cash, holdings: {asset_id: qty}, net_worth }
@@ -180,7 +200,12 @@ curl -X POST localhost:8000/director/force_stage -H 'Content-Type: application/j
 {"type": "tick", "t": 12, "assets": [{"id": "sol-nova", "stage": "main_sequence", "price": 500.4, "L": 1.002}]}
 {"type": "leaderboard", "rows": [{"nickname": "zaki", "net_worth": 10012.5}]}
 {"type": "news", "item": {"id": "…", "t": 41, "kind": "lifecycle", "headline": "Kestrel goes supernova", "body": "…", "asset_ids": ["kestrel"]}}
+{"type": "listed", "asset": {"id": "fathom", "stage": "protostar", "…": "a full Asset"}}
+{"type": "delisted", "asset_id": "kestrel"}
 ```
+
+`listed` arrives when a star spawns, before it appears in `tick` messages.
+`delisted` arrives when a black hole leaves the market.
 
 `tick` is sent every tick and `leaderboard` every 5 ticks. `news` is sent when
 an item is published, usually about 1.5 s after the stage change (Gemma's
@@ -189,6 +214,6 @@ messages on top.
 
 ## Not built yet
 
-Nebulae and protostars, the major events and rumours in section 5 of the
-pricing doc, a game end and persistence. State resets when the server
+Nebulae, the major events and rumours in section 5 of the pricing doc, a game
+end and persistence. State resets when the server
 restarts.

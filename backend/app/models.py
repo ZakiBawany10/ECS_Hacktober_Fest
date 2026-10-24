@@ -35,12 +35,18 @@ class FireEventRequest(BaseModel):
     asset_id: str
 
 
+class SpawnStarRequest(BaseModel):
+    spectral_type: Literal["O", "B", "A", "F", "G", "K", "M"] | None = None  # random if left out
+
+
 class Asset(BaseModel):
     id: str
     name: str
     kind: Literal["star"]
     stage: Stage
-    spectral_type: str  # at birth; stays the same as the star evolves
+    # Birth values that stay the same as the star evolves. For a protostar they're the forecast's
+    # projection, which can change, and the true values appear when it ignites.
+    spectral_type: str
     mass: float  # solar masses
     temperature: float  # kelvin
     L: float  # luminosity, solar units
@@ -104,3 +110,17 @@ class LeaderboardMessage(BaseModel):
 class NewsMessage(BaseModel):
     type: Literal["news"] = "news"
     item: NewsItem
+
+
+class ListedMessage(BaseModel):
+    """A new star has spawned. It also appears in tick messages from now on."""
+
+    type: Literal["listed"] = "listed"
+    asset: Asset
+
+
+class DelistedMessage(BaseModel):
+    """A star has left the market and won't appear in tick messages again. Its holdings are gone."""
+
+    type: Literal["delisted"] = "delisted"
+    asset_id: str

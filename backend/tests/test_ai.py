@@ -64,7 +64,7 @@ def test_client_raises_after_two_failures(response):
 
 
 def test_every_later_stage_has_a_note_and_fallback():
-    later_stages = set(STAGE_LABELS) - {"main_sequence"}
+    later_stages = set(STAGE_LABELS) - {"protostar"}
     assert set(STAGE_NOTES) == later_stages
     assert set(FALLBACKS) == later_stages
     for stage in later_stages:

@@ -41,7 +41,8 @@ def test_rejected_trades():
     assert client.post("/join", json={"nickname": "   "}).status_code == 422
 
 
-def test_history_and_websocket_tick():
+def test_history_and_websocket_tick(monkeypatch):
+    monkeypatch.setattr(main, "market", Market(random_events=False))  # so the first message is a tick
     assert client.get("/assets/sol-nova/history").json()[0]["t"] == 0
     assert client.get("/assets/nope/history").status_code == 404
     with TestClient(app) as live_client, live_client.websocket_connect("/ws") as ws:
@@ -100,3 +101,29 @@ def test_director_fire_event_publishes_news(monkeypatch, fake_gemma):
     assert client.post("/director/fire_event", json=flare_on_giant).status_code == 400
     assert client.post("/director/fire_event", json={"type": "meteor_strike", "asset_id": "nope"}).status_code == 404
     assert client.post("/director/fire_event", json={"type": "supernova", "asset_id": "kora"}).status_code == 422
+
+
+def test_protostar_hides_its_true_type(monkeypatch):
+    monkeypatch.setattr(main, "market", Market(random_events=False))
+    star = main.market.spawn_star("O")
+    star.forecast.final_error = star.forecast.start_offset = -0.6  # forecast looks like a much dimmer star
+    main.market.advance()
+    asset = next(a for a in client.get("/state").json()["assets"] if a["id"] == star.id)
+    assert asset["stage"] == "protostar"
+    assert asset["spectral_type"] != "O"
+
+
+def test_director_spawn_star_lists_and_announces(monkeypatch, fake_gemma):
+    monkeypatch.setattr(main, "market", Market(random_events=False))
+    with TestClient(app) as live_client, live_client.websocket_connect("/ws") as ws:
+        response = live_client.post("/director/spawn_star", json={"spectral_type": "M"})
+        assert response.status_code == 200
+        asset = response.json()
+        messages = [ws.receive_json() for _ in range(3)]
+    assert asset["stage"] == "protostar"
+    listed = next(m for m in messages if m["type"] == "listed")
+    assert listed["asset"]["id"] == asset["id"]
+    news = next(m for m in messages if m["type"] == "news")
+    assert news["item"]["asset_ids"] == [asset["id"]]
+    assert "new protostar" in fake_gemma.prompts[-1]
+    assert client.post("/director/spawn_star", json={"spectral_type": "X"}).status_code == 422

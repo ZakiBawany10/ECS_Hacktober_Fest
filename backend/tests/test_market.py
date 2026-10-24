@@ -13,6 +13,7 @@ from app.lifecycle import (
     SUPERNOVA_DROP_SECONDS,
     SUPERNOVA_GLOW_SECONDS,
     generate_luminosity,
+    next_stage,
     seconds_to_ticks,
 )
 from app.market import Market, MarketError, NotFoundError
@@ -136,7 +137,7 @@ def walk_lifecycle(market: Market, star_id: str) -> list[str]:
     """Advance a star through every stage, skipping the waiting, and return the stages it visited."""
     star = market.stars[star_id]
     stages = [star.stage]
-    while star.ticks_left is not None:
+    while next_stage(star.stage, star.spectral_type) is not None:
         star.ticks_left = 1
         market.advance()
         if star.stage != stages[-1]:
@@ -264,7 +265,7 @@ def test_forced_supernova_lands_on_its_remnant():
     market.force_next_stage("altra")
     market.force_next_stage("altra")
     remnant_price = star.path[-1].end_price
-    assert market.force_next_stage("altra").stage == "neutron_star"
+    assert market.force_next_stage("altra").new_stage == "neutron_star"
     assert star.price == pytest.approx(remnant_price, abs=0.01)
 
 
@@ -320,7 +321,7 @@ def test_seconds_left_starts_star_late_in_life():
 
 def test_force_next_stage_walks_the_path():
     market = make_market()
-    stages = [market.force_next_stage("kestrel").stage for _ in range(3)]
+    stages = [market.force_next_stage("kestrel").new_stage for _ in range(3)]
     assert stages == ["blue_hypergiant", "supernova", "black_hole"]
     assert market.stars["kestrel"].price == 0.0
     with pytest.raises(MarketError, match="final stage"):
@@ -424,3 +425,81 @@ def test_event_effect_survives_a_stage_change():
     market.force_next_stage("sol-nova")
     assert event.id in star.multipliers
     assert star.price == star.priced_at(star.impact)
+
+
+def test_spawned_star_starts_as_protostar_and_ignites_at_true_value():
+    market = make_market()
+    star = market.spawn_star("F")
+    assert star.stage == "protostar" and star.id in market.stars
+    forecast = star.forecast
+    while star.stage == "protostar":
+        market.advance()
+    assert star.stage == "main_sequence"
+    assert star.base_L == forecast.true_L
+    assert star.L == pytest.approx(forecast.true_L, rel=0.05)  # plus one tick of twinkle
+    low, high = MAIN_SEQUENCE_L_BOUNDS["F"]
+    assert low <= star.base_L <= high
+    assert walk_lifecycle(market, star.id) == ["main_sequence", "blue_giant", "supernova", "neutron_star"]
+
+
+def test_protostar_price_follows_its_forecast():
+    market = make_market()
+    star = market.spawn_star("G")
+    forecast = star.forecast
+    updates = 0
+    while star.ticks_left > 1:
+        updates += len(market.advance().forecast_updates)
+        expected = forecast.true_price * (1 + forecast.final_error)
+        assert star.price == pytest.approx(expected, rel=0.2)
+    assert updates == 1  # one "forecast updated" item, halfway through
+    assert star.price == pytest.approx(forecast.true_price * (1 + forecast.final_error), rel=0.05)
+
+
+def test_ignition_reports_how_the_forecast_did():
+    market = make_market()
+    star = market.spawn_star("K")
+    star.forecast.final_error = 0.3  # forecast far too high
+    change = market.force_next_stage(star.id)
+    assert (change.old_stage, change.new_stage) == ("protostar", "main_sequence")
+    assert "dimmer than forecast" in change.note
+
+
+def test_spawned_names_and_ids_are_unique():
+    market = make_market()
+    market.name_pool.extend(["Sol Nova", "Wisp", "wisp"])
+    stars = [market.spawn_star() for _ in range(3)]
+    names = [star.name for star in stars]
+    assert names[0] == "Wisp"  # Sol Nova is taken, and so is wisp once Wisp is used
+    assert len({name.lower() for name in names} | {"sol nova"}) == 4
+    assert len({star.id for star in market.stars.values()}) == len(market.stars)
+
+
+def test_spawning_stops_at_the_living_star_limit():
+    market = Market(rng=random.Random(2))
+    for _ in range(3000):
+        market.advance()
+        assert len(market.living_stars()) <= config.MAX_LIVING_STARS
+    assert any(star.forecast is not None for star in market.stars.values())
+
+
+def test_black_hole_is_delisted_after_a_minute():
+    market = make_market()
+    player = market.join("zaki")
+    market.trade(player.id, "kestrel", "buy", 1)
+    walk_lifecycle(market, "kestrel")
+    market.events.clear()
+    delisted = []
+    for _ in range(seconds_to_ticks(60)):
+        delisted += market.advance().delisted
+    assert [star.id for star in delisted] == ["kestrel"]
+    assert "kestrel" not in market.stars
+    assert player.holdings == {}
+    assert market.net_worth(player) == player.cash
+
+
+def test_protostars_dodge_events():
+    market = make_market()
+    star = market.spawn_star()
+    for event_type in ("meteor_strike", "stellar_flare", "coronal_collapse"):
+        with pytest.raises(MarketError):
+            market.start_event(event_type, star.id)

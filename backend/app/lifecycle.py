@@ -7,6 +7,7 @@ from typing import Literal
 from . import config
 
 Stage = Literal[
+    "protostar",
     "main_sequence",
     "red_giant",
     "blue_giant",
@@ -20,6 +21,7 @@ Stage = Literal[
 
 # How stages are written in news text.
 STAGE_LABELS: dict[Stage, str] = {
+    "protostar": "protostar",
     "main_sequence": "main-sequence star",
     "red_giant": "red giant",
     "blue_giant": "blue giant",
@@ -64,16 +66,17 @@ STAGE_L_BOUNDS: dict[Stage, tuple[float, float]] = {
     "neutron_star": _from_shifted_log(0.00, 6.00),
 }
 
-# The stages each spectral type passes through, from sections 2 and 4 of
+# The stages each spectral type passes through, from sections 2 to 4 of
 # docs/main_sequence_pricing_data.md. G, K and M skip the supernova and go straight to their remnant.
+# Spawned stars start as protostars; the seeded ones start on the main sequence.
 LIFECYCLE_PATHS: dict[str, list[Stage]] = {
-    "O": ["main_sequence", "blue_hypergiant", "supernova", "black_hole"],
-    "B": ["main_sequence", "red_hypergiant", "supernova", "black_hole"],
-    "A": ["main_sequence", "blue_giant", "supernova", "neutron_star"],
-    "F": ["main_sequence", "blue_giant", "supernova", "neutron_star"],
-    "G": ["main_sequence", "red_giant", "white_dwarf"],
-    "K": ["main_sequence", "red_giant", "white_dwarf"],
-    "M": ["main_sequence", "red_giant", "white_dwarf"],
+    "O": ["protostar", "main_sequence", "blue_hypergiant", "supernova", "black_hole"],
+    "B": ["protostar", "main_sequence", "red_hypergiant", "supernova", "black_hole"],
+    "A": ["protostar", "main_sequence", "blue_giant", "supernova", "neutron_star"],
+    "F": ["protostar", "main_sequence", "blue_giant", "supernova", "neutron_star"],
+    "G": ["protostar", "main_sequence", "red_giant", "white_dwarf"],
+    "K": ["protostar", "main_sequence", "red_giant", "white_dwarf"],
+    "M": ["protostar", "main_sequence", "red_giant", "white_dwarf"],
 }
 
 # Stage durations in real seconds, compressed for a ~20 minute session. Hotter types burn out sooner.
@@ -88,13 +91,14 @@ MAIN_SEQUENCE_SECONDS: dict[str, tuple[float, float]] = {
 }
 # None means the stage is terminal. A supernova lasts as long as its price path: see SUPERNOVA_PEAK.
 STAGE_SECONDS: dict[Stage, tuple[float, float] | None] = {
+    "protostar": (60, 90),
     "red_giant": (120, 180),
     "blue_giant": (120, 180),
     "red_hypergiant": (60, 120),
     "blue_hypergiant": (60, 120),
     "white_dwarf": None,
     "neutron_star": None,
-    "black_hole": None,
+    "black_hole": (60, 60),  # then it's delisted
 }
 
 # Section 4 price paths, which are straight lines in luminosity price. A supernova jumps to
@@ -108,6 +112,9 @@ SUPERNOVA_DROP_SECONDS = 8.0
 # Stages entered without a supernova decline from the giant's price to the remnant's price.
 DECLINE_STAGES: set[Stage] = {"white_dwarf"}
 DECLINE_SECONDS = 45.0
+
+# Dead stars. They don't count towards the limit on stars in play (MAX_LIVING_STARS).
+REMNANT_STAGES: set[Stage] = {"white_dwarf", "neutron_star", "black_hole"}
 
 # Stages with no luminosity: L and price sit at 0 and don't twinkle.
 DARK_STAGES: set[Stage] = {"black_hole"}

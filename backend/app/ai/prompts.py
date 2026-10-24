@@ -1,6 +1,6 @@
 """What Gemma is asked, the JSON it must reply with, and the templates used when it can't."""
 
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, StringConstraints
 
@@ -35,6 +35,7 @@ class Headline(BaseModel):
 # What each new stage means for the price, so Gemma's headlines point players the right way.
 _GIANT_NOTE = "It has swollen and brightened enormously, so its price is rallying."
 STAGE_NOTES: dict[Stage, str] = {
+    "main_sequence": "It has ignited and started fusing hydrogen, so its true value is finally known.",
     "red_giant": _GIANT_NOTE,
     "blue_giant": _GIANT_NOTE,
     "red_hypergiant": _GIANT_NOTE,
@@ -50,6 +51,7 @@ STAGE_NOTES: dict[Stage, str] = {
 
 _GIANT_FALLBACK = ("{name} swells into a {label}", "{name} has left the main sequence and its price is rallying.")
 FALLBACKS: dict[Stage, tuple[str, str]] = {
+    "main_sequence": ("{name} ignites", "{name} has joined the main sequence. {note}"),
     "red_giant": _GIANT_FALLBACK,
     "blue_giant": _GIANT_FALLBACK,
     "red_hypergiant": _GIANT_FALLBACK,
@@ -95,14 +97,60 @@ def event_fallback(event_type: EventType, facts: dict[str, str]) -> Headline:
     return Headline(headline=headline.format(**facts), body=body.format(**facts))
 
 
-def stage_change_prompt(name: str, spectral_type: str, old_stage: Stage, new_stage: Stage) -> str:
+def stage_change_prompt(name: str, spectral_type: str, old_stage: Stage, new_stage: Stage, note: str = "") -> str:
+    extra = f" {note}" if note else ""
     return (
         f"{name}, a type {spectral_type} star, has just evolved from a {STAGE_LABELS[old_stage]} "
-        f"into a {STAGE_LABELS[new_stage]}. {STAGE_NOTES[new_stage]} {_HEADLINE_REQUEST}"
+        f"into a {STAGE_LABELS[new_stage]}. {STAGE_NOTES[new_stage]}{extra} {_HEADLINE_REQUEST}"
     )
 
 
-def stage_change_fallback(name: str, new_stage: Stage) -> Headline:
+def stage_change_fallback(name: str, new_stage: Stage, note: str = "") -> Headline:
     headline, body = FALLBACKS[new_stage]
-    label = STAGE_LABELS[new_stage]
-    return Headline(headline=headline.format(name=name, label=label), body=body.format(name=name, label=label))
+    facts = {"name": name, "label": STAGE_LABELS[new_stage], "note": note}
+    return Headline(headline=headline.format(**facts), body=body.format(**facts).strip())
+
+
+# News about a star outside its stage changes: from discovery as a protostar to delisting as a black hole.
+StarNews = Literal["discovery", "forecast", "delisted"]
+
+SPECTRAL_LOOKS = {
+    "O": "a huge, hot blue type O star",
+    "B": "a bright blue-white type B star",
+    "A": "a white type A star",
+    "F": "a yellow-white type F star",
+    "G": "a yellow, Sun-like type G star",
+    "K": "an orange type K star",
+    "M": "a dim red type M dwarf",
+}
+
+STAR_NEWS_NOTES: dict[StarNews, str] = {
+    "discovery": (
+        "Astronomers have spotted {name}, a new protostar: a collapsing cloud of gas that hasn't started "
+        "fusing yet. Forecasters project it will become {projection}. Forecasts this early can be badly wrong, "
+        "and its true value is only revealed when it ignites. Traders can buy in now at the forecast price."
+    ),
+    "forecast": (
+        "Forecasters have updated their projection for {name}, a protostar still gathering gas: they now "
+        "expect {projection}, {revision}. It will ignite and reveal its true value soon."
+    ),
+    "delisted": (
+        "{name}, a black hole, has been delisted from the exchange. Its shares were worthless and have been "
+        "written off."
+    ),
+}
+
+STAR_NEWS_FALLBACKS: dict[StarNews, tuple[str, str]] = {
+    "discovery": ("New protostar {name} spotted", "Forecasters expect {name} to become {projection}."),
+    "forecast": ("Forecast updated for {name}", "Forecasters now expect {projection}, {revision}."),
+    "delisted": ("{name} delisted", "{name}'s worthless black hole shares have been written off."),
+}
+
+
+def star_news_prompt(kind: StarNews, facts: dict[str, str]) -> str:
+    return f"{STAR_NEWS_NOTES[kind].format(**facts)} {_HEADLINE_REQUEST}"
+
+
+def star_news_fallback(kind: StarNews, facts: dict[str, str]) -> Headline:
+    headline, body = STAR_NEWS_FALLBACKS[kind]
+    return Headline(headline=headline.format(**facts), body=body.format(**facts))

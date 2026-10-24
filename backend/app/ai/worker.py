@@ -37,10 +37,12 @@ class AIWorker:
         self.queue.put_nowait(HeadlineJob(user_prompt, fallback, time.monotonic() + self.deadline_seconds, on_ready))
 
     def request_stage_headline(
-        self, name: str, spectral_type: str, old_stage: Stage, new_stage: Stage, on_ready: OnHeadline
+        self, name: str, spectral_type: str, old_stage: Stage, new_stage: Stage, on_ready: OnHeadline, note: str = ""
     ) -> None:
         self.request_headline(
-            stage_change_prompt(name, spectral_type, old_stage, new_stage), stage_change_fallback(name, new_stage), on_ready
+            stage_change_prompt(name, spectral_type, old_stage, new_stage, note),
+            stage_change_fallback(name, new_stage, note),
+            on_ready,
         )
 
     async def run(self) -> None:
