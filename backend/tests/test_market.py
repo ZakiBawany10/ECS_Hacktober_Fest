@@ -4,9 +4,19 @@ import random
 import pytest
 
 from app import config
-from app.lifecycle import DARK_STAGES, MAIN_SEQUENCE_L_BOUNDS, STAGE_L_BOUNDS, generate_luminosity
+from app.lifecycle import (
+    DARK_STAGES,
+    DECLINE_SECONDS,
+    LIFECYCLE_PATHS,
+    MAIN_SEQUENCE_L_BOUNDS,
+    STAGE_L_BOUNDS,
+    SUPERNOVA_DROP_SECONDS,
+    SUPERNOVA_GLOW_SECONDS,
+    generate_luminosity,
+    seconds_to_ticks,
+)
 from app.market import Market, MarketError, NotFoundError
-from app.pricing import apply_impact, market_price, price_from_luminosity, twinkle
+from app.pricing import apply_impact, luminosity_from_price, market_price, price_from_luminosity, twinkle
 
 
 def test_price_follows_log_luminosity():
@@ -14,6 +24,8 @@ def test_price_follows_log_luminosity():
     assert price_from_luminosity(1_000.0) == 800.0
     assert price_from_luminosity(3e-4) == pytest.approx(147.71, abs=0.01)  # smallest M star
     assert price_from_luminosity(0.0) == 0.0  # black hole
+    for price in (0.0, 147.71, 500.0, 3300.0):
+        assert price_from_luminosity(luminosity_from_price(price)) == price
 
 
 def test_twinkle_stays_near_base():
@@ -128,7 +140,7 @@ def walk_lifecycle(market: Market, star_id: str) -> list[str]:
         market.advance()
         if star.stage != stages[-1]:
             stages.append(star.stage)
-            if star.stage in DARK_STAGES:
+            if star.stage in DARK_STAGES or star.stage not in STAGE_L_BOUNDS:
                 continue
             low, high = STAGE_L_BOUNDS[star.stage]
             assert low <= star.base_L <= high * (1 + 1e-12)
@@ -192,14 +204,89 @@ def test_black_hole_cannot_be_traded():
     assert player.holdings == {"kestrel": 1}
 
 
-def test_supernova_snaps_to_new_luminosity():
-    market = make_market()
-    star = market.stars["kestrel"]
-    star.stage = "blue_hypergiant"
+def start_supernova(market: Market, star_id: str):
+    """Put a star on the tick before its supernova and return it with its luminosity price."""
+    star = market.stars[star_id]
+    path = LIFECYCLE_PATHS[star.spectral_type]
+    star.stage = path[path.index("supernova") - 1]
     star.ticks_left = 1
+    pre_price = price_from_luminosity(star.L)
     market.advance()
     assert star.stage == "supernova"
-    assert abs(math.log10(star.L) - math.log10(star.base_L)) < 0.05  # only one tick of twinkle
+    return star, pre_price
+
+
+def test_supernova_spikes_fades_then_drops_to_neutron_star():
+    market = make_market()
+    star, pre_price = start_supernova(market, "altra")
+    assert star.price == pytest.approx(3 * pre_price, abs=0.02)
+    glow_ticks = star.path[0].end_tick - market.tick
+    low, high = SUPERNOVA_GLOW_SECONDS
+    assert seconds_to_ticks(low) <= glow_ticks <= seconds_to_ticks(high)
+
+    glow = [star.price]
+    for _ in range(glow_ticks):
+        market.advance()
+        glow.append(star.price)
+    assert glow == sorted(glow, reverse=True)
+    assert glow[-1] == pytest.approx(2.7 * pre_price, abs=0.02)
+
+    drop = []
+    while star.stage == "supernova":
+        market.advance()
+        drop.append(star.price)
+    assert len(drop) == seconds_to_ticks(SUPERNOVA_DROP_SECONDS)
+    assert drop == sorted(drop, reverse=True)
+    assert star.stage == "neutron_star"
+    assert 0.0 <= star.price <= 600.0
+    assert star.path == []
+
+
+def test_black_hole_supernova_can_be_sold_until_it_collapses():
+    market = make_market()
+    player = market.join("zaki")
+    market.trade(player.id, "brightwater", "buy", 2)
+    star, _ = start_supernova(market, "brightwater")
+    while market.tick < star.path[-1].end_tick - 1:
+        market.advance()
+    assert star.stage == "supernova"
+    assert 0.0 < star.price < 1000.0
+    market.trade(player.id, "brightwater", "sell", 1)
+    market.advance()
+    assert star.stage == "black_hole"
+    assert star.price == 0.0
+
+
+def test_forced_supernova_lands_on_its_remnant():
+    market = make_market()
+    star = market.stars["altra"]
+    market.force_next_stage("altra")
+    market.force_next_stage("altra")
+    remnant_price = star.path[-1].end_price
+    assert market.force_next_stage("altra").stage == "neutron_star"
+    assert star.price == pytest.approx(remnant_price, abs=0.01)
+
+
+def test_white_dwarf_declines_linearly_from_giant():
+    market = make_market()
+    star = market.stars["sol-nova"]
+    market.force_next_stage("sol-nova")
+    giant_price = star.price
+    market.force_next_stage("sol-nova")
+    assert star.stage == "white_dwarf"
+    assert star.price == pytest.approx(giant_price, abs=0.01)
+    target = price_from_luminosity(star.base_L)
+
+    prices = [star.price]
+    for _ in range(seconds_to_ticks(DECLINE_SECONDS)):
+        market.advance()
+        prices.append(star.price)
+    steps = [a - b for a, b in zip(prices, prices[1:])]
+    assert max(steps) - min(steps) < 0.05  # a straight line, give or take rounding
+    assert prices[-1] == pytest.approx(target, abs=0.01)
+    assert star.path == []
+    market.advance()  # twinkle takes over again
+    assert star.price == pytest.approx(target, rel=0.02)
 
 
 def test_seconds_left_starts_star_late_in_life():

@@ -45,8 +45,8 @@ constants are in `app/config.py`.
 Each star's luminosity is generated within bounds: at startup from its spectral
 type's main-sequence range (Table 1 of the pricing doc), and again whenever it
 enters a new stage. After a stage change, L eases towards the new value through
-the twinkle's mean reversion; a supernova jumps straight to its value. A black
-hole has no light: its L and price sit at 0 and don't move. The spectral type
+the twinkle's mean reversion. A black hole has no light: its L and price sit at
+0 and don't move. The spectral type
 decides the path (sections 2 and 4 of the pricing doc); mass is display only:
 
 ```text
@@ -59,9 +59,21 @@ G, K, M  main_sequence → red_giant → white_dwarf
 Giant and hypergiant bounds come from Table 4 of the pricing doc, except that a
 hypergiant's lower bound is never below the top of its main-sequence range, so
 becoming one is always a rally. White dwarf and neutron star bounds come from
-Table 5 (prices 0 to 700 and 0 to 600). **The supernova bounds are a
-placeholder** (`STAGE_L_BOUNDS` in `app/lifecycle.py`) until section 4's
-supernova price path (×3 spike, slow fall, sharp drop) is built. Stage
+Table 5 (prices 0 to 700 and 0 to 600).
+
+Section 4's price moves are scripted as straight lines in price, with L set
+from the price, so trading pressure, history and the WebSocket work as usual.
+The twinkle pauses while a script runs:
+
+- **Supernova (O, B, A, F):** the price jumps to 3× its value just before the
+  supernova, fades slowly to 2.7× over 27–33 s, then drops over 8 s to the
+  remnant's price (0 for a black hole). The star stays a tradeable supernova
+  until the drop ends, so players can sell on the way down.
+- **White dwarf (G, K, M):** the price declines from the giant's value to the
+  white dwarf's over 45 s.
+
+The constants are in `app/lifecycle.py`. A supernova's L is huge (around
+10²⁸ L☉ for a 3300 price). Stage
 durations are compressed for the demo. `spectral_type`, `mass` and `temperature`
 are birth values and don't change as a star evolves.
 

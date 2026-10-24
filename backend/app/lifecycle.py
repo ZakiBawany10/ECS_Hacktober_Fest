@@ -36,7 +36,8 @@ def _from_shifted_log(low: float, high: float) -> tuple[float, float]:
     return (10 ** (low - offset), 10 ** (high - offset))
 
 
-# L/L☉ bounds for each stage after the main sequence. Black holes have none: see DARK_STAGES.
+# L/L☉ bounds for each stage after the main sequence. A supernova's price follows a scripted path
+# instead (see SUPERNOVA_PEAK), and black holes have no light (see DARK_STAGES).
 STAGE_L_BOUNDS: dict[Stage, tuple[float, float]] = {
     # Table 4 of docs/main_sequence_pricing_data.md.
     "red_giant": _from_shifted_log(6.00, 9.00),
@@ -45,8 +46,6 @@ STAGE_L_BOUNDS: dict[Stage, tuple[float, float]] = {
     # Table 4's red hypergiant floor (1e5) is already above B's top (4.5e4); blue starts at O's top.
     "red_hypergiant": _from_shifted_log(10.00, 10.70),
     "blue_hypergiant": (MAIN_SEQUENCE_L_BOUNDS["O"][1], _from_shifted_log(10.30, 11.48)[1]),
-    # PLACEHOLDER until the section 4 supernova price path is built.
-    "supernova": (1e9, 1e10),
     # Table 5 of docs/main_sequence_pricing_data.md.
     "white_dwarf": _from_shifted_log(0.00, 7.00),
     "neutron_star": _from_shifted_log(0.00, 6.00),
@@ -74,20 +73,28 @@ MAIN_SEQUENCE_SECONDS: dict[str, tuple[float, float]] = {
     "K": (600, 900),
     "M": (600, 900),
 }
-# None means the stage is terminal.
+# None means the stage is terminal. A supernova lasts as long as its price path: see SUPERNOVA_PEAK.
 STAGE_SECONDS: dict[Stage, tuple[float, float] | None] = {
     "red_giant": (120, 180),
     "blue_giant": (120, 180),
     "red_hypergiant": (60, 120),
     "blue_hypergiant": (60, 120),
-    "supernova": (10, 15),
     "white_dwarf": None,
     "neutron_star": None,
     "black_hole": None,
 }
 
-# Stages whose luminosity jumps straight to the new value instead of easing towards it.
-SNAP_STAGES: set[Stage] = {"supernova"}
+# Section 4 price paths, which are straight lines in luminosity price. A supernova jumps to
+# SUPERNOVA_PEAK × the star's price, fades slowly to SUPERNOVA_FADE of that peak over
+# SUPERNOVA_GLOW_SECONDS, then drops to its remnant's price over SUPERNOVA_DROP_SECONDS. It
+# becomes the remnant when the drop ends, so players can still sell on the way down.
+SUPERNOVA_PEAK = 3.0
+SUPERNOVA_FADE = 0.9
+SUPERNOVA_GLOW_SECONDS = (27.0, 33.0)
+SUPERNOVA_DROP_SECONDS = 8.0
+# Stages entered without a supernova decline from the giant's price to the remnant's price.
+DECLINE_STAGES: set[Stage] = {"white_dwarf"}
+DECLINE_SECONDS = 45.0
 
 # Stages with no luminosity: L and price sit at 0 and don't twinkle.
 DARK_STAGES: set[Stage] = {"black_hole"}

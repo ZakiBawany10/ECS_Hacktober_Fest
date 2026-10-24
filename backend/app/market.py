@@ -7,16 +7,30 @@ from dataclasses import dataclass, field
 from . import config
 from .lifecycle import (
     DARK_STAGES,
+    DECLINE_SECONDS,
+    DECLINE_STAGES,
     MAIN_SEQUENCE_L_BOUNDS,
-    SNAP_STAGES,
     STAGE_L_BOUNDS,
+    SUPERNOVA_DROP_SECONDS,
+    SUPERNOVA_FADE,
+    SUPERNOVA_GLOW_SECONDS,
+    SUPERNOVA_PEAK,
     Stage,
     generate_luminosity,
     next_stage,
     roll_duration_ticks,
     seconds_to_ticks,
 )
-from .pricing import apply_impact, decay_impact, market_price, price_from_luminosity, twinkle
+from .pricing import (
+    PriceLeg,
+    apply_impact,
+    decay_impact,
+    luminosity_from_price,
+    market_price,
+    path_price,
+    price_from_luminosity,
+    twinkle,
+)
 from .seed import SEED_STARS
 
 # Tolerance for float comparisons on cash and share quantities.
@@ -44,6 +58,7 @@ class Star:
     impact: float = 1.0  # trading-pressure multiplier on the luminosity price; decays back to 1
     stage: Stage = "main_sequence"
     ticks_left: int | None = None  # ticks until the next stage; None means the star never evolves
+    path: list[PriceLeg] = field(default_factory=list)  # server-only: scripted price legs; L follows them
     shares_held: float = 0.0
     history: deque[tuple[int, float]] = field(default_factory=lambda: deque(maxlen=config.HISTORY_LENGTH))
 
@@ -100,15 +115,48 @@ class Market:
             self.stars[star.id] = star
 
     def _enter_stage(self, star: Star, stage: Stage) -> None:
+        # A star leaving mid-path, such as a supernova forced early, lands where its path was heading.
+        landing_price = star.path[-1].end_price if star.path else None
+        star.path = []
         star.stage = stage
+        if stage == "supernova":
+            self._start_supernova(star)
+            return
         star.ticks_left = roll_duration_ticks(stage, star.spectral_type, self.rng)
         if stage in DARK_STAGES:
             star.base_L = star.L = 0.0
-            return
-        # Twinkle's mean reversion eases L towards the new base_L over the next few ticks.
-        star.base_L = generate_luminosity(STAGE_L_BOUNDS[stage], self.rng)
-        if stage in SNAP_STAGES:
-            star.L = star.base_L
+        elif landing_price is not None:
+            star.base_L = star.L = luminosity_from_price(landing_price)
+        else:
+            # Twinkle's mean reversion eases L towards the new base_L over the next few ticks.
+            star.base_L = generate_luminosity(STAGE_L_BOUNDS[stage], self.rng)
+            if stage in DECLINE_STAGES:
+                start_price = price_from_luminosity(star.L)
+                self._start_path(star, start_price, [(DECLINE_SECONDS, price_from_luminosity(star.base_L))])
+
+    def _start_supernova(self, star: Star) -> None:
+        """Spike to SUPERNOVA_PEAK × the price, fade slowly, then drop to the remnant's price."""
+        peak = SUPERNOVA_PEAK * price_from_luminosity(star.L)
+        remnant = next_stage("supernova", star.spectral_type)
+        if remnant in DARK_STAGES:
+            remnant_price = 0.0
+        else:
+            remnant_price = price_from_luminosity(generate_luminosity(STAGE_L_BOUNDS[remnant], self.rng))
+        glow_seconds = self.rng.uniform(*SUPERNOVA_GLOW_SECONDS)
+        self._start_path(
+            star, peak, [(glow_seconds, SUPERNOVA_FADE * peak), (SUPERNOVA_DROP_SECONDS, remnant_price)]
+        )
+        star.ticks_left = star.path[-1].end_tick - self.tick
+
+    def _start_path(self, star: Star, start_price: float, legs: list[tuple[float, float]]) -> None:
+        """Script the star's luminosity price as straight lines from now, each (seconds, end price)."""
+        tick = self.tick
+        star.path = []
+        for seconds, end_price in legs:
+            end_tick = tick + seconds_to_ticks(seconds)
+            star.path.append(PriceLeg(tick, start_price, end_tick, end_price))
+            tick, start_price = end_tick, end_price
+        star.L = luminosity_from_price(path_price(star.path, self.tick))
 
     def force_next_stage(self, asset_id: str) -> Star:
         """Move a star to its next stage now, for testing and the demo."""
@@ -131,7 +179,12 @@ class Market:
                         star.ticks_left = None
                     else:
                         self._enter_stage(star, stage)
-            if star.stage not in DARK_STAGES:
+            if star.path:
+                star.L = luminosity_from_price(path_price(star.path, self.tick))
+                if self.tick >= star.path[-1].end_tick:
+                    star.base_L = star.L
+                    star.path = []
+            elif star.stage not in DARK_STAGES:
                 star.L = twinkle(star.L, star.base_L, self.rng)
             star.impact = decay_impact(star.impact)
             star.price = market_price(star.L, star.impact)
