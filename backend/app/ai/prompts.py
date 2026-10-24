@@ -4,7 +4,8 @@ from typing import Annotated
 
 from pydantic import BaseModel, StringConstraints
 
-from ..lifecycle import Stage
+from ..events import EventType
+from ..lifecycle import STAGE_LABELS, Stage
 
 SYSTEM = (
     "You write breaking-news items for Star Market, a live stock market game where the assets are stars "
@@ -30,18 +31,6 @@ class Headline(BaseModel):
     headline: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)]
     body: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=400)]
 
-
-STAGE_LABELS: dict[Stage, str] = {
-    "main_sequence": "main-sequence star",
-    "red_giant": "red giant",
-    "blue_giant": "blue giant",
-    "red_hypergiant": "red hypergiant",
-    "blue_hypergiant": "blue hypergiant",
-    "supernova": "supernova",
-    "white_dwarf": "white dwarf",
-    "neutron_star": "neutron star",
-    "black_hole": "black hole",
-}
 
 # What each new stage means for the price, so Gemma's headlines point players the right way.
 _GIANT_NOTE = "It has swollen and brightened enormously, so its price is rallying."
@@ -72,11 +61,44 @@ FALLBACKS: dict[Stage, tuple[str, str]] = {
 }
 
 
+# What happened, filled in with the event's facts plus {name} and {stage}. Gemma writes from this.
+EVENT_NOTES: dict[EventType, str] = {
+    "meteor_strike": (
+        "A {size} meteor storm has hit {name}, a {stage}. Its light has dipped, so its price has dropped, "
+        "but it should recover within about half a minute."
+    ),
+    "stellar_flare": (
+        "{name}, a {stage}, has erupted in a {size} stellar flare. Its price has jumped, "
+        "but the flare fades within about 20 seconds."
+    ),
+    "coronal_collapse": (
+        "{name}, a {stage}, is collapsing faster than forecast: it will become a {next_stage} much sooner "
+        "than expected."
+    ),
+}
+
+EVENT_FALLBACKS: dict[EventType, tuple[str, str]] = {
+    "meteor_strike": ("Meteor storm batters {name}", "{name} has dimmed after a meteor strike. A recovery is expected within the minute."),
+    "stellar_flare": ("{name} erupts in a stellar flare", "A flare has lit up {name}, but it should fade within half a minute."),
+    "coronal_collapse": ("{name}'s core is collapsing early", "{name} will become a {next_stage} sooner than expected."),
+}
+
+_HEADLINE_REQUEST = "Write a headline of at most 12 words and a body of one or two sentences."
+
+
+def event_prompt(event_type: EventType, facts: dict[str, str]) -> str:
+    return f"{EVENT_NOTES[event_type].format(**facts)} {_HEADLINE_REQUEST}"
+
+
+def event_fallback(event_type: EventType, facts: dict[str, str]) -> Headline:
+    headline, body = EVENT_FALLBACKS[event_type]
+    return Headline(headline=headline.format(**facts), body=body.format(**facts))
+
+
 def stage_change_prompt(name: str, spectral_type: str, old_stage: Stage, new_stage: Stage) -> str:
     return (
         f"{name}, a type {spectral_type} star, has just evolved from a {STAGE_LABELS[old_stage]} "
-        f"into a {STAGE_LABELS[new_stage]}. {STAGE_NOTES[new_stage]} "
-        "Write a headline of at most 12 words and a body of one or two sentences."
+        f"into a {STAGE_LABELS[new_stage]}. {STAGE_NOTES[new_stage]} {_HEADLINE_REQUEST}"
     )
 
 

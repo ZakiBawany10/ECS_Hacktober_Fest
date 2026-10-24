@@ -51,7 +51,7 @@ def test_history_and_websocket_tick():
 
 
 def test_director_force_stage(monkeypatch):
-    monkeypatch.setattr(main, "market", Market())  # keep the shared market untouched for other tests
+    monkeypatch.setattr(main, "market", Market(random_events=False))  # keep the shared market untouched
     response = client.post("/director/force_stage", json={"asset_id": "altra"})
     assert response.status_code == 200
     assert response.json()["stage"] == "blue_giant"
@@ -64,7 +64,7 @@ def test_director_force_stage(monkeypatch):
 
 
 def test_stage_change_news_reaches_state(monkeypatch, fake_gemma):
-    monkeypatch.setattr(main, "market", Market())
+    monkeypatch.setattr(main, "market", Market(random_events=False))
     fake_gemma.reply = {"headline": "Altra swells", "body": "Up it goes."}
     client.post("/director/force_stage", json={"asset_id": "altra"})
     asyncio.run(main.worker.handle(main.worker.queue.get_nowait()))
@@ -76,10 +76,27 @@ def test_stage_change_news_reaches_state(monkeypatch, fake_gemma):
 
 
 def test_websocket_sends_news(monkeypatch):
-    monkeypatch.setattr(main, "market", Market())
+    monkeypatch.setattr(main, "market", Market(random_events=False))
     with TestClient(app) as live_client, live_client.websocket_connect("/ws") as ws:
         live_client.post("/director/force_stage", json={"asset_id": "kestrel"})
         messages = [ws.receive_json() for _ in range(3)]
         news = next(message for message in messages if message["type"] == "news")
     assert news["item"]["headline"] == "Fake headline"
     assert news["item"]["asset_ids"] == ["kestrel"]
+
+
+def test_director_fire_event_publishes_news(monkeypatch, fake_gemma):
+    monkeypatch.setattr(main, "market", Market(random_events=False))
+    response = client.post("/director/fire_event", json={"type": "meteor_strike", "asset_id": "kora"})
+    assert response.status_code == 200
+    assert response.json()["id"] == "kora"
+    asyncio.run(main.worker.handle(main.worker.queue.get_nowait()))
+    [news] = client.get("/state").json()["news"]
+    assert (news["kind"], news["asset_ids"]) == ("event", ["kora"])
+    assert "meteor storm has hit Kora, a main-sequence star" in fake_gemma.prompts[0]
+
+    flare_on_giant = {"type": "stellar_flare", "asset_id": "kora"}
+    client.post("/director/force_stage", json={"asset_id": "kora"})
+    assert client.post("/director/fire_event", json=flare_on_giant).status_code == 400
+    assert client.post("/director/fire_event", json={"type": "meteor_strike", "asset_id": "nope"}).status_code == 404
+    assert client.post("/director/fire_event", json={"type": "supernova", "asset_id": "kora"}).status_code == 422

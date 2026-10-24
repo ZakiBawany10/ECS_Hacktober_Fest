@@ -4,6 +4,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, StringConstraints
 
+from .events import EventType
 from .lifecycle import Stage
 from .market import NewsKind
 
@@ -26,6 +27,11 @@ class TradeRequest(BaseModel):
 
 
 class ForceStageRequest(BaseModel):
+    asset_id: str
+
+
+class FireEventRequest(BaseModel):
+    type: EventType
     asset_id: str
 
 

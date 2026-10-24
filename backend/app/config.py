@@ -16,6 +16,9 @@ TWINKLE_REVERSION = 0.05
 
 HISTORY_LENGTH = 600  # price points kept per asset (10 minutes at 1 tick/s)
 LEADERBOARD_EVERY_TICKS = 5
+# Events start at random, on average this often (section 5.0.1 of the pricing doc says 30 s; halved for
+# a busier game). Event types, weights and effects are in app/events.py.
+EVENT_MEAN_GAP_SECONDS = 15.0
 NEWS_LENGTH = 50  # news items kept for /state, so late joiners can catch up
 
 # Trading pressure: each trade nudges a star's price multiplier, which then decays back to 1.

@@ -32,17 +32,15 @@ class AIWorker:
         self.deadline_seconds = deadline_seconds
         self.queue: asyncio.Queue[HeadlineJob] = asyncio.Queue()
 
+    def request_headline(self, user_prompt: str, fallback: Headline, on_ready: OnHeadline) -> None:
+        """Queue a headline. on_ready gets Gemma's, or the fallback once the deadline passes."""
+        self.queue.put_nowait(HeadlineJob(user_prompt, fallback, time.monotonic() + self.deadline_seconds, on_ready))
+
     def request_stage_headline(
         self, name: str, spectral_type: str, old_stage: Stage, new_stage: Stage, on_ready: OnHeadline
     ) -> None:
-        """Queue a stage-change headline. on_ready gets Gemma's, or the template once the deadline passes."""
-        self.queue.put_nowait(
-            HeadlineJob(
-                user_prompt=stage_change_prompt(name, spectral_type, old_stage, new_stage),
-                fallback=stage_change_fallback(name, new_stage),
-                deadline=time.monotonic() + self.deadline_seconds,
-                on_ready=on_ready,
-            )
+        self.request_headline(
+            stage_change_prompt(name, spectral_type, old_stage, new_stage), stage_change_fallback(name, new_stage), on_ready
         )
 
     async def run(self) -> None:

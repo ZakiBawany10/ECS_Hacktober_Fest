@@ -18,6 +18,19 @@ Stage = Literal[
     "black_hole",
 ]
 
+# How stages are written in news text.
+STAGE_LABELS: dict[Stage, str] = {
+    "main_sequence": "main-sequence star",
+    "red_giant": "red giant",
+    "blue_giant": "blue giant",
+    "red_hypergiant": "red hypergiant",
+    "blue_hypergiant": "blue hypergiant",
+    "supernova": "supernova",
+    "white_dwarf": "white dwarf",
+    "neutron_star": "neutron star",
+    "black_hole": "black hole",
+}
+
 # Main-sequence L/L☉ bounds by spectral type, from Table 1 of docs/main_sequence_pricing_data.md.
 MAIN_SEQUENCE_L_BOUNDS: dict[str, tuple[float, float]] = {
     "O": (5e4, 7e5),

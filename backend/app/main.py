@@ -6,12 +6,15 @@ from pydantic import BaseModel
 
 from . import config
 from .ai.client import GemmaClient
-from .ai.prompts import Headline
+from .ai.prompts import Headline, event_fallback, event_prompt
 from .ai.worker import AIWorker
-from .market import Market, MarketError, News, NotFoundError, Player, StageChange, Star
+from .events import Event
+from .lifecycle import STAGE_LABELS
+from .market import Market, MarketError, News, NewsKind, NotFoundError, Player, StageChange, Star
 from .models import (
     Asset,
     AssetTick,
+    FireEventRequest,
     ForceStageRequest,
     JoinRequest,
     JoinResponse,
@@ -91,22 +94,37 @@ def news_out(news: News) -> NewsItem:
     )
 
 
-def announce(change: StageChange) -> None:
-    """Ask the worker for a headline about a stage change, and publish it when it's ready."""
-    star = market.get_star(change.asset_id)
+def publisher(kind: NewsKind, asset_ids: list[str], t: int):
+    """Return a callback that publishes a finished headline to the feed and the WebSocket."""
 
     async def publish(headline: Headline) -> None:
-        news = market.add_news("lifecycle", headline.headline, headline.body, [star.id], t=change.t)
+        news = market.add_news(kind, headline.headline, headline.body, asset_ids, t=t)
         await connections.broadcast(NewsMessage(item=news_out(news)))
 
+    return publish
+
+
+def announce_stage_change(change: StageChange) -> None:
+    star = market.get_star(change.asset_id)
+    publish = publisher("lifecycle", [star.id], change.t)
     worker.request_stage_headline(star.name, star.spectral_type, change.old_stage, change.new_stage, publish)
+
+
+def announce_event(event: Event) -> None:
+    star = market.get_star(event.asset_id)
+    facts = {"name": star.name, "stage": STAGE_LABELS[star.stage], **event.facts}
+    publish = publisher("event", [star.id], event.t)
+    worker.request_headline(event_prompt(event.type, facts), event_fallback(event.type, facts), publish)
 
 
 async def tick_loop() -> None:
     while True:
         await asyncio.sleep(config.TICK_SECONDS)
-        for change in market.advance():
-            announce(change)
+        report = market.advance()
+        for change in report.stage_changes:
+            announce_stage_change(change)
+        for event in report.events:
+            announce_event(event)
         ticks = [AssetTick(id=s.id, stage=s.stage, price=s.price, L=s.L) for s in market.stars.values()]
         await connections.broadcast(TickMessage(t=market.tick, assets=ticks))
         if market.tick % config.LEADERBOARD_EVERY_TICKS == 0:
@@ -188,8 +206,20 @@ async def force_stage(request: ForceStageRequest) -> Asset:
         raise HTTPException(status_code=404, detail=str(error)) from error
     except MarketError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
-    announce(StageChange(star.id, old_stage, star.stage, market.tick))
+    announce_stage_change(StageChange(star.id, old_stage, star.stage, market.tick))
     return asset_out(star)
+
+
+@app.post("/director/fire_event")
+async def fire_event(request: FireEventRequest) -> Asset:
+    try:
+        event = market.start_event(request.type, request.asset_id)
+    except NotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except MarketError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    announce_event(event)
+    return asset_out(market.get_star(event.asset_id))
 
 
 @app.websocket("/ws")

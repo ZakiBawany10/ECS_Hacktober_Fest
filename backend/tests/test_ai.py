@@ -5,7 +5,17 @@ import httpx
 import pytest
 
 from app.ai.client import GemmaClient, GemmaError
-from app.ai.prompts import FALLBACKS, STAGE_LABELS, STAGE_NOTES, Headline, stage_change_fallback
+from app.ai.prompts import (
+    EVENT_FALLBACKS,
+    EVENT_NOTES,
+    FALLBACKS,
+    STAGE_LABELS,
+    STAGE_NOTES,
+    Headline,
+    event_fallback,
+    stage_change_fallback,
+)
+from app.events import EVENT_WEIGHTS
 from app.ai.worker import AIWorker
 from conftest import FakeChatClient
 
@@ -101,3 +111,10 @@ def test_worker_skips_gemma_once_deadline_has_passed():
     client = FakeChatClient()
     assert run_job(client, deadline_seconds=0) == [stage_change_fallback("Altra", "supernova")]
     assert client.prompts == []
+
+
+def test_every_event_type_has_a_note_and_fallback():
+    assert set(EVENT_NOTES) == set(EVENT_FALLBACKS) == set(EVENT_WEIGHTS)
+    facts = {"name": "Kora", "stage": "red giant", "size": "heavy", "next_stage": "white dwarf"}
+    for event_type in EVENT_WEIGHTS:
+        assert "Kora" in event_fallback(event_type, facts).headline

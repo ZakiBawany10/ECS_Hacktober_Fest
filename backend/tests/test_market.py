@@ -37,7 +37,8 @@ def test_twinkle_stays_near_base():
 
 
 def make_market() -> Market:
-    return Market(rng=random.Random(0))
+    """A seeded market with no random events, so prices only move when a test says so."""
+    return Market(rng=random.Random(0), random_events=False)
 
 
 def test_join_gives_starting_cash():
@@ -291,10 +292,10 @@ def test_white_dwarf_declines_linearly_from_giant():
 
 def test_advance_reports_stage_changes():
     market = make_market()
-    assert market.advance() == []
+    assert market.advance().stage_changes == []
     star = market.stars["kestrel"]
     star.ticks_left = 1
-    [change] = market.advance()
+    [change] = market.advance().stage_changes
     assert (change.asset_id, change.old_stage, change.new_stage, change.t) == (
         "kestrel",
         "main_sequence",
@@ -356,3 +357,70 @@ def test_repeated_round_trips_never_make_money():
         market.trade(player.id, star.id, "buy", qty)
         market.trade(player.id, star.id, "sell", qty)
     assert player.cash < config.STARTING_CASH
+
+
+def test_random_events_average_one_per_gap():
+    market = Market(rng=random.Random(5))
+    ticks = 2400
+    started = sum(len(market.advance().events) for _ in range(ticks))
+    expected = ticks * config.TICK_SECONDS / config.EVENT_MEAN_GAP_SECONDS
+    assert 0.7 * expected < started < 1.3 * expected
+
+
+def test_meteor_strike_dips_then_recovers():
+    market = make_market()
+    star = market.stars["sol-nova"]
+    event = market.start_event("meteor_strike", "sol-nova")
+    peak = star.multipliers[event.id].target
+    assert 0.91 <= peak <= 0.97
+    for _ in range(5):
+        market.advance()
+    assert star.price < 0.98 * market_price(star.L, star.impact)
+    for _ in range(60):
+        market.advance()
+    assert star.multipliers == {} and market.events == {}
+    assert star.price == market_price(star.L, star.impact)
+
+
+def test_stellar_flare_lifts_price_and_trades_fill_at_it():
+    market = make_market()
+    star = market.stars["ember"]
+    market.start_event("stellar_flare", "ember")
+    for _ in range(4):
+        market.advance()
+    assert star.event_multiplier > 1.1
+    player = market.join("zaki")
+    trade = market.trade(player.id, "ember", "buy", 1)
+    assert trade.price == star.priced_at(star.impact) > market_price(star.L, star.impact)
+
+
+def test_events_need_an_eligible_star():
+    market = make_market()
+    market.force_next_stage("kestrel")
+    with pytest.raises(MarketError, match="stellar flare"):
+        market.start_event("stellar_flare", "kestrel")  # a hypergiant, not main sequence
+    with pytest.raises(MarketError):
+        market.start_event("coronal_collapse", "sol-nova")  # not a red giant yet
+    walk_lifecycle(market, "kestrel")
+    with pytest.raises(MarketError):
+        market.start_event("meteor_strike", "kestrel")  # black hole
+    with pytest.raises(NotFoundError):
+        market.start_event("meteor_strike", "nope")
+
+
+def test_coronal_collapse_brings_next_stage_forward():
+    market = make_market()
+    star = market.stars["sol-nova"]
+    market.force_next_stage("sol-nova")
+    star.ticks_left = 100
+    market.start_event("coronal_collapse", "sol-nova")
+    assert 40 <= star.ticks_left <= 70
+
+
+def test_event_effect_survives_a_stage_change():
+    market = make_market()
+    star = market.stars["sol-nova"]
+    event = market.start_event("meteor_strike", "sol-nova")
+    market.force_next_stage("sol-nova")
+    assert event.id in star.multipliers
+    assert star.price == star.priced_at(star.impact)

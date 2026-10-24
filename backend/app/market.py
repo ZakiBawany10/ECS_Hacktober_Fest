@@ -1,3 +1,4 @@
+import math
 import random
 import time
 import uuid
@@ -6,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 from . import config
+from .events import EVENT_WEIGHTS, Event, EventType, Multiplier, create_event, eligible
 from .lifecycle import (
     DARK_STAGES,
     DECLINE_SECONDS,
@@ -62,12 +64,21 @@ class Star:
     stage: Stage = "main_sequence"
     ticks_left: int | None = None  # ticks until the next stage; None means the star never evolves
     path: list[PriceLeg] = field(default_factory=list)  # server-only: scripted price legs; L follows them
+    multipliers: dict[str, Multiplier] = field(default_factory=dict)  # event effects on price, keyed by event id
     shares_held: float = 0.0
     history: deque[tuple[int, float]] = field(default_factory=lambda: deque(maxlen=config.HISTORY_LENGTH))
 
     @property
     def shares_available(self) -> float:
         return config.SHARES_PER_STAR - self.shares_held
+
+    @property
+    def event_multiplier(self) -> float:
+        return math.prod(multiplier.value for multiplier in self.multipliers.values())
+
+    def priced_at(self, impact: float) -> float:
+        """Share price with this trading-pressure multiplier and the current event multipliers."""
+        return market_price(self.L, self.event_multiplier * impact)
 
 
 @dataclass
@@ -76,6 +87,14 @@ class StageChange:
     old_stage: Stage
     new_stage: Stage
     t: int
+
+
+@dataclass
+class TickReport:
+    """What happened during a tick that the news should cover."""
+
+    stage_changes: list[StageChange] = field(default_factory=list)
+    events: list[Event] = field(default_factory=list)
 
 
 @dataclass
@@ -111,13 +130,15 @@ class Trade:
 class Market:
     """In-memory, authoritative game state. Not thread-safe: call it from one event loop."""
 
-    def __init__(self, rng: random.Random | None = None) -> None:
+    def __init__(self, rng: random.Random | None = None, random_events: bool = True) -> None:
+        """random_events=False stops the scheduler, for tests; start_event still works."""
         self.rng = rng or random.Random()
         self.tick = 0
         self.stars: dict[str, Star] = {}
         self.players: dict[str, Player] = {}
         self.trades: list[Trade] = []
         self.news: deque[News] = deque(maxlen=config.NEWS_LENGTH)
+        self.events: dict[str, Event] = {}
         for seed in SEED_STARS:
             L = generate_luminosity(MAIN_SEQUENCE_L_BOUNDS[seed["spectral_type"]], self.rng)
             star = Star(
@@ -135,6 +156,7 @@ class Market:
                 star.ticks_left = seconds_to_ticks(seed["seconds_left"])
             star.history.append((self.tick, star.price))
             self.stars[star.id] = star
+        self.next_event_tick = self._roll_next_event_tick() if random_events else None
 
     def _enter_stage(self, star: Star, stage: Stage) -> None:
         # A star leaving mid-path, such as a supernova forced early, lands where its path was heading.
@@ -187,13 +209,47 @@ class Market:
         if stage is None:
             raise MarketError(f"{star.name} is already in its final stage")
         self._enter_stage(star, stage)
-        star.price = market_price(star.L, star.impact)
+        star.price = star.priced_at(star.impact)
         return star
 
-    def advance(self) -> list[StageChange]:
-        """Move the market on one tick and return the stage changes it caused."""
+    def start_event(self, event_type: EventType, asset_id: str) -> Event:
+        """Start an event on a star now, or raise MarketError if it can't happen to that star."""
+        star = self.get_star(asset_id)
+        if not eligible(event_type, star):
+            raise MarketError(f"A {event_type.replace('_', ' ')} can't happen to {star.name} as a {star.stage}")
+        event = create_event(event_type, star, self.tick, self.rng)
+        event.start(star)
+        self.events[event.id] = event
+        return event
+
+    def _roll_next_event_tick(self) -> int:
+        """Events arrive as a Poisson process: exponential gaps averaging EVENT_MEAN_GAP_SECONDS."""
+        return self.tick + seconds_to_ticks(self.rng.expovariate(1 / config.EVENT_MEAN_GAP_SECONDS))
+
+    def _start_random_event(self) -> Event | None:
+        """Pick a type by weight among those with an eligible star, then one of those stars at random."""
+        candidates = {
+            event_type: [star for star in self.stars.values() if eligible(event_type, star)]
+            for event_type in EVENT_WEIGHTS
+        }
+        types = [event_type for event_type, stars in candidates.items() if stars]
+        if not types:
+            return None
+        event_type = self.rng.choices(types, weights=[EVENT_WEIGHTS[t] for t in types])[0]
+        return self.start_event(event_type, self.rng.choice(candidates[event_type]).id)
+
+    def advance(self) -> TickReport:
+        """Move the market on one tick and report the stage changes and new events."""
         self.tick += 1
-        changes: list[StageChange] = []
+        report = TickReport()
+        if self.next_event_tick is not None and self.tick >= self.next_event_tick:
+            event = self._start_random_event()
+            if event is not None:
+                report.events.append(event)
+            self.next_event_tick = self._roll_next_event_tick()
+        for event in list(self.events.values()):
+            if event.tick(self.stars[event.asset_id], self.tick):
+                del self.events[event.id]
         for star in self.stars.values():
             if star.ticks_left is not None:
                 star.ticks_left -= 1
@@ -202,7 +258,7 @@ class Market:
                     if stage is None:
                         star.ticks_left = None
                     else:
-                        changes.append(StageChange(star.id, star.stage, stage, self.tick))
+                        report.stage_changes.append(StageChange(star.id, star.stage, stage, self.tick))
                         self._enter_stage(star, stage)
             if star.path:
                 star.L = luminosity_from_price(path_price(star.path, self.tick))
@@ -211,10 +267,12 @@ class Market:
                     star.path = []
             elif star.stage not in DARK_STAGES:
                 star.L = twinkle(star.L, star.base_L, self.rng)
+            for multiplier in star.multipliers.values():
+                multiplier.ease()
             star.impact = decay_impact(star.impact)
-            star.price = market_price(star.L, star.impact)
+            star.price = star.priced_at(star.impact)
             star.history.append((self.tick, star.price))
-        return changes
+        return report
 
     def add_news(self, kind: NewsKind, headline: str, body: str, asset_ids: list[str], t: int | None = None) -> News:
         """Publish a news item. t defaults to now; pass the tick an event happened if it was earlier."""
@@ -262,7 +320,7 @@ class Market:
             raise MarketError("Side must be 'buy' or 'sell'")
 
         impact = apply_impact(star.impact, side, qty * star.price)
-        fill_price = market_price(star.L, impact)
+        fill_price = star.priced_at(impact)
         cost = qty * fill_price
         if side == "buy":
             if qty > star.shares_available + EPSILON:

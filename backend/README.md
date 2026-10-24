@@ -26,6 +26,7 @@ Check [health](http://127.0.0.1:8000/health) or open the
 | `app/market.py` | In-memory game state: stars, players, trades, net worth |
 | `app/pricing.py` | Price formula, trading pressure and per-tick luminosity noise |
 | `app/lifecycle.py` | Luminosity bounds, stage durations and lifecycle paths |
+| `app/events.py` | Price-moving events: types, weights, effects and eligibility |
 | `app/seed.py` | Starting stars (one main-sequence star per spectral type) |
 | `app/config.py` | Game constants and env vars |
 | `app/ai/client.py` | Calls Gemma through Ollama's chat API with a JSON schema |
@@ -104,6 +105,29 @@ The constants are in `app/lifecycle.py`. A supernova's L is huge (around
 durations are compressed for the demo. `spectral_type`, `mass` and `temperature`
 are birth values and don't change as a star evolves.
 
+## Events
+
+Events follow section 5 of the pricing doc. Code rolls every number; Gemma only
+writes the news. An event moves a star's price through a named multiplier that
+eases towards a target (`m += (target − m) × (1 − exp(−dt / tau))`), so:
+
+```text
+price = 100 × (log10(L/L☉) + 5) × event multipliers × trading pressure
+```
+
+Effects survive stage changes. The scheduler starts an event at random, on
+average every 15 s (`EVENT_MEAN_GAP_SECONDS`; the doc says 30 s), picking a type
+by weight among those with an eligible star:
+
+| Type | Weight | Targets | Effect |
+|---|---|---|---|
+| `meteor_strike` | 25 | any star except a black hole | price −3% to −9%, recovers over ~30 s |
+| `stellar_flare` | 20 | main-sequence stars | price +12% to +28%, fades over ~20 s |
+| `coronal_collapse` | 10 | red giants and red hypergiants | 30–60% of the stage's remaining time removed |
+
+Each event publishes an `event` news item. The other events in the doc aren't
+built yet; magnetar starquakes and black hole feeding are left out on purpose.
+
 ## API
 
 The frontend dev server proxies `/api/*` here, so `/join` is `/api/join` from
@@ -117,6 +141,7 @@ the browser.
 | GET | `/portfolio/{player_id}` | | `Portfolio` |
 | POST | `/trade` | `{player_id, asset_id, side: "buy"\|"sell", qty}` | `Portfolio` |
 | POST | `/director/force_stage` | `{asset_id}` | `Asset` after moving it to its next stage |
+| POST | `/director/fire_event` | `{type, asset_id}` | `Asset` after starting the event on it |
 
 ```text
 Asset     { id, name, kind: "star", stage, spectral_type, mass, temperature, L,
@@ -130,8 +155,9 @@ NewsItem  { id, t, kind: "lifecycle" | "event" | "rumour" | "system", headline,
 ```
 
 `news` in `/state` holds the last 50 items, oldest first. `t` is the tick the
-news is about, which can be a tick or two before it was published. Only
-`lifecycle` items exist so far: one per stage change, including forced ones.
+news is about, which can be a tick or two before it was published. `lifecycle`
+items cover stage changes (including forced ones) and `event` items cover
+events; `rumour` and `system` aren't used yet.
 
 Errors use FastAPI's `{"detail": ...}` body: 400 for a rejected trade (not
 enough cash, shares or holdings, or the star is a black hole), 404 for an unknown player/asset, 422 for an
@@ -141,7 +167,8 @@ at the shown price fails with "Not enough cash".
 
 `/director/*` endpoints drive the game by hand for testing and the demo. They
 have no auth. `force_stage` returns 400 if the star is already in its final
-stage. For example:
+stage, and `fire_event` returns 400 if the event can't happen to that star (see
+Events). For example:
 
 ```sh
 curl -X POST localhost:8000/director/force_stage -H 'Content-Type: application/json' -d '{"asset_id": "kestrel"}'
@@ -162,6 +189,6 @@ messages on top.
 
 ## Not built yet
 
-Nebulae and protostars, random events and rumours, more director endpoints
-and persistence. State resets when the server
+Nebulae and protostars, the major events and rumours in section 5 of the
+pricing doc, a game end and persistence. State resets when the server
 restarts.
