@@ -193,3 +193,14 @@ def test_supernova_snaps_to_new_luminosity():
 def test_seconds_left_starts_star_late_in_life():
     market = make_market()
     assert market.stars["kestrel"].ticks_left == round(40 / config.TICK_SECONDS)
+
+
+def test_force_next_stage_walks_the_path():
+    market = make_market()
+    stages = [market.force_next_stage("kestrel").stage for _ in range(3)]
+    assert stages == ["blue_hypergiant", "supernova", "black_hole"]
+    assert market.stars["kestrel"].price == 0.0
+    with pytest.raises(MarketError, match="final stage"):
+        market.force_next_stage("kestrel")
+    with pytest.raises(NotFoundError):
+        market.force_next_stage("nope")

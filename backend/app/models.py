@@ -24,6 +24,10 @@ class TradeRequest(BaseModel):
     qty: float = Field(gt=0)
 
 
+class ForceStageRequest(BaseModel):
+    asset_id: str
+
+
 class Asset(BaseModel):
     id: str
     name: str

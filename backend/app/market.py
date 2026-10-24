@@ -109,6 +109,16 @@ class Market:
         if stage in SNAP_STAGES:
             star.L = star.base_L
 
+    def force_next_stage(self, asset_id: str) -> Star:
+        """Move a star to its next stage now, for testing and the demo."""
+        star = self.get_star(asset_id)
+        stage = next_stage(star.stage, star.spectral_type)
+        if stage is None:
+            raise MarketError(f"{star.name} is already in its final stage")
+        self._enter_stage(star, stage)
+        star.price = price_from_luminosity(star.L)
+        return star
+
     def advance(self) -> None:
         self.tick += 1
         for star in self.stars.values():

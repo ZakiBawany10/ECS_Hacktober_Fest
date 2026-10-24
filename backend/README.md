@@ -68,6 +68,7 @@ the browser.
 | GET | `/assets/{id}/history` | | `{t, price}[]` (last 600 ticks) |
 | GET | `/portfolio/{player_id}` | | `Portfolio` |
 | POST | `/trade` | `{player_id, asset_id, side: "buy"\|"sell", qty}` | `Portfolio` |
+| POST | `/director/force_stage` | `{asset_id}` | `Asset` after moving it to its next stage |
 
 ```text
 Asset     { id, name, kind: "star", stage, spectral_type, mass, temperature, L,
@@ -82,6 +83,14 @@ Errors use FastAPI's `{"detail": ...}` body: 400 for a rejected trade (not
 enough cash, shares or holdings, or the star is a black hole), 404 for an unknown player/asset, 422 for an
 invalid body. Quantities may be fractional; trades fill at the current price.
 
+`/director/*` endpoints drive the game by hand for testing and the demo. They
+have no auth. `force_stage` returns 400 if the star is already in its final
+stage. For example:
+
+```sh
+curl -X POST localhost:8000/director/force_stage -H 'Content-Type: application/json' -d '{"asset_id": "kestrel"}'
+```
+
 **WebSocket `/ws`** (server → client):
 
 ```json
@@ -94,6 +103,6 @@ start, then apply `tick` messages on top.
 
 ## Not built yet
 
-Nebulae and protostars, random events, news feed, director
+Nebulae and protostars, random events, news feed, more director
 endpoints, Gemma integration and persistence. State resets when the server
 restarts.

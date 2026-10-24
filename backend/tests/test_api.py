@@ -1,6 +1,8 @@
 from fastapi.testclient import TestClient
 
+from app import main
 from app.main import app
+from app.market import Market
 
 # Created without a `with` block, so the lifespan tick loop doesn't run and prices stay put.
 client = TestClient(app)
@@ -44,3 +46,16 @@ def test_history_and_websocket_tick():
         message = ws.receive_json()
     assert message["type"] == "tick"
     assert {"id", "stage", "price", "L"} <= message["assets"][0].keys()
+
+
+def test_director_force_stage(monkeypatch):
+    monkeypatch.setattr(main, "market", Market())  # keep the shared market untouched for other tests
+    response = client.post("/director/force_stage", json={"asset_id": "altra"})
+    assert response.status_code == 200
+    assert response.json()["stage"] == "blue_giant"
+    stages = {asset["id"]: asset["stage"] for asset in client.get("/state").json()["assets"]}
+    assert stages["altra"] == "blue_giant"
+    for _ in range(2):
+        client.post("/director/force_stage", json={"asset_id": "altra"})
+    assert client.post("/director/force_stage", json={"asset_id": "altra"}).status_code == 400
+    assert client.post("/director/force_stage", json={"asset_id": "nope"}).status_code == 404

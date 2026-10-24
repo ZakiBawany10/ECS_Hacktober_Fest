@@ -9,6 +9,7 @@ from .market import Market, MarketError, NotFoundError, Player, Star
 from .models import (
     Asset,
     AssetTick,
+    ForceStageRequest,
     JoinRequest,
     JoinResponse,
     LeaderboardMessage,
@@ -140,6 +141,18 @@ async def trade(request: TradeRequest) -> Portfolio:
     except MarketError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     return portfolio_out(market.get_player(request.player_id))
+
+
+# Director endpoints drive the game by hand for testing and the demo. No auth, by design.
+@app.post("/director/force_stage")
+async def force_stage(request: ForceStageRequest) -> Asset:
+    try:
+        star = market.force_next_stage(request.asset_id)
+    except NotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except MarketError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    return asset_out(star)
 
 
 @app.websocket("/ws")
