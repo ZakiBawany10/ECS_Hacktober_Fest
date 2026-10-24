@@ -116,7 +116,7 @@ price = 100 × (log10(L/L☉) + 5) × event multipliers × trading pressure
 ```
 
 Effects survive stage changes. The scheduler starts an event at random, on
-average every 15 s (`EVENT_MEAN_GAP_SECONDS`; the doc says 30 s), picking a type
+average every 20 s (`EVENT_MEAN_GAP_SECONDS`; the doc says 30 s), picking a type
 by weight among those with an eligible star:
 
 | Type | Weight | Targets | Effect |
