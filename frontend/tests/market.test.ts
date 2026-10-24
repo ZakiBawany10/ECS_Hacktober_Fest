@@ -2,10 +2,12 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import {
+  applyMarketMessage,
   applyMarketTick,
   createMarketState,
   mergeAssetHistory,
   parseHistory,
+  parseMarketMessage,
   parseSnapshot,
   parseTickMessage,
 } from '../src/market/backend.ts';
@@ -152,4 +154,29 @@ test('unknown asset delta requests a new authoritative snapshot', () => {
   const message = update(11, 600);
   message.assets[0].id = 'new-server-asset';
   assert.throws(() => applyMarketTick(createMarketState(snapshot()), message), /fresh snapshot/);
+});
+
+test('a listed message adds a spawned protostar that later ticks then update', () => {
+  const listed = parseMarketMessage({
+    type: 'listed',
+    asset: {
+      ...snapshot().assets[0], id: 'vesper', name: 'Vesper', stage: 'protostar', price: 450, listed: true,
+    },
+  });
+  assert.ok(listed);
+  let state = applyMarketMessage(createMarketState(snapshot()), listed);
+  assert.equal(applyMarketMessage(state, listed), state);
+  const asset = state.market.assets.find((asset) => asset.id === 'vesper');
+  assert.ok(asset);
+  assert.equal(asset.classification, 'Protostar');
+  assert.equal(asset.price, 450);
+
+  const tick = parseTickMessage({ type: 'tick', t: 11, assets: [
+    { id: 'real-server-id', stage: 'main_sequence', price: 500, L: 1 },
+    { id: 'vesper', stage: 'protostar', price: 455, L: 1 },
+  ] });
+  assert.ok(tick);
+  state = applyMarketTick(state, tick);
+  assert.equal(state.market.assets.find((asset) => asset.id === 'vesper')?.price, 455);
+  assert.deepEqual(state.pointsByAsset.get('vesper'), [{ t: 10, price: 450 }, { t: 11, price: 455 }]);
 });

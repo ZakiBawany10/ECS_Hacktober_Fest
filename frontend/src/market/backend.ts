@@ -4,6 +4,7 @@ import { mergeNewsItems, parseNewsItem, parseNewsSnapshot } from './news.ts';
 import type { MarketView, NewsHeadline, StarAsset, StarCategory } from './types.ts';
 
 const stages = {
+  protostar: { label: 'Protostar', category: 'Nebula' },
   main_sequence: { label: 'Main sequence', category: 'Main sequence' },
   red_giant: { label: 'Red giant', category: 'Giant', color: '#fb9277' },
   blue_giant: { label: 'Blue giant', category: 'Giant', color: '#a8c6ff' },
@@ -50,7 +51,13 @@ export interface BackendNewsMessage {
   item: NewsHeadline;
 }
 
-export type BackendMarketMessage = BackendTick | BackendNewsMessage;
+/** A newly spawned star. Its first tick message follows straight after. */
+export interface BackendListedMessage {
+  type: 'listed';
+  asset: BackendAsset;
+}
+
+export type BackendMarketMessage = BackendTick | BackendNewsMessage | BackendListedMessage;
 
 export interface LiveMarketState {
   market: MarketView;
@@ -111,24 +118,26 @@ function parseAssetTick(value: unknown): BackendTick['assets'][number] {
   };
 }
 
+function parseAsset(value: unknown): BackendAsset {
+  const asset = record(value, 'asset');
+  if (asset.kind !== 'star') throw new Error('The server returned an unsupported asset kind.');
+  return {
+    ...parseAssetTick(asset),
+    name: string(asset.name, 'asset name'),
+    kind: 'star',
+    spectral_type: string(asset.spectral_type, 'spectral type'),
+    mass: number(asset.mass, 'mass'),
+    temperature: number(asset.temperature, 'temperature'),
+    shares_total: number(asset.shares_total, 'share supply'),
+    shares_available: number(asset.shares_available, 'available shares'),
+  };
+}
+
 export function parseSnapshot(value: unknown): BackendSnapshot {
   const snapshot = record(value, 'market snapshot');
   return {
     t: tick(snapshot.t),
-    assets: uniqueAssets(snapshot.assets, (value) => {
-      const asset = record(value, 'asset');
-      if (asset.kind !== 'star') throw new Error('The server returned an unsupported asset kind.');
-      return {
-        ...parseAssetTick(asset),
-        name: string(asset.name, 'asset name'),
-        kind: 'star',
-        spectral_type: string(asset.spectral_type, 'spectral type'),
-        mass: number(asset.mass, 'mass'),
-        temperature: number(asset.temperature, 'temperature'),
-        shares_total: number(asset.shares_total, 'share supply'),
-        shares_available: number(asset.shares_available, 'available shares'),
-      };
-    }),
+    assets: uniqueAssets(snapshot.assets, parseAsset),
     ...parseNewsSnapshot(snapshot.news),
   };
 }
@@ -144,6 +153,7 @@ export function parseTickMessage(value: unknown): BackendTick | null {
 export function parseMarketMessage(value: unknown): BackendMarketMessage | null {
   const message = record(value, 'market message');
   if (message.type === 'news') return { type: 'news', item: parseNewsItem(message.item) };
+  if (message.type === 'listed') return { type: 'listed', asset: parseAsset(message.asset) };
   return parseTickMessage(message);
 }
 
@@ -169,26 +179,30 @@ function appearance(stage: BackendStage, spectralType: string) {
   };
 }
 
+function starAsset(asset: BackendAsset, points: PricePoint[]): StarAsset {
+  return {
+    id: asset.id,
+    symbol: asset.id,
+    name: asset.name,
+    ...appearance(asset.stage, asset.spectral_type),
+    spectralType: asset.spectral_type,
+    temperature: asset.temperature,
+    price: asset.price,
+    previousPrice: null,
+    previousChange: null,
+    luminosity: asset.L,
+    mass: asset.mass,
+    history: buildCandles(points),
+  };
+}
+
 /** A new authoritative snapshot starts a fresh connection baseline and history. */
 export function createMarketState(snapshot: BackendSnapshot, receivedAt = Date.now()): LiveMarketState {
   const pointsByAsset = new Map<string, PricePoint[]>();
   const assets = snapshot.assets.map((asset): StarAsset => {
     const points = [{ t: snapshot.t, price: asset.price }];
     pointsByAsset.set(asset.id, points);
-    return {
-      id: asset.id,
-      symbol: asset.id,
-      name: asset.name,
-      ...appearance(asset.stage, asset.spectral_type),
-      spectralType: asset.spectral_type,
-      temperature: asset.temperature,
-      price: asset.price,
-      previousPrice: null,
-      previousChange: null,
-      luminosity: asset.L,
-      mass: asset.mass,
-      history: buildCandles(points),
-    };
+    return starAsset(asset, points);
   });
   return {
     market: {
@@ -208,6 +222,7 @@ export function applyMarketMessage(
   receivedAt = Date.now(),
 ): LiveMarketState {
   if (message.type === 'tick') return applyMarketTick(state, message, receivedAt);
+  if (message.type === 'listed') return addListedAsset(state, message.asset);
   const news = mergeNewsItems(state.market.news ?? [], [message.item]);
   if (state.market.news?.length === news.length && news.every((item, index) => item === state.market.news?.[index])) {
     return state;
@@ -218,6 +233,19 @@ export function applyMarketMessage(
       ...state.market,
       news,
     },
+  };
+}
+
+/** A spawned star joins the market; a replay of one already in the snapshot is ignored. */
+export function addListedAsset(state: LiveMarketState, asset: BackendAsset): LiveMarketState {
+  if (state.pointsByAsset.has(asset.id)) return state;
+  const points = [{ t: state.market.tick, price: asset.price }];
+  const pointsByAsset = new Map(state.pointsByAsset);
+  pointsByAsset.set(asset.id, points);
+  return {
+    ...state,
+    market: { ...state.market, assets: [...state.market.assets, starAsset(asset, points)] },
+    pointsByAsset,
   };
 }
 
