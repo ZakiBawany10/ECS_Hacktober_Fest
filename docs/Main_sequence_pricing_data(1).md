@@ -53,7 +53,7 @@ For now, each star has 1000 shares attached to it.
 
 the way i would like to add the next stages of life to the main sequence is to assign types of "Giant star" to the types of main sequence.
 
-M,K,G, become red giants F,A beecome Blue Giants B become Red Hyper Giants O become Blue Hyper Giants
+M,K,G, become red giants F,B beecome Blue Giants B become Red Hyper Giants O become Blue Hyper Giants
 
 the values for our adjusted luminosities and therefore the price per share
 
@@ -71,3 +71,20 @@ share price is of course 100 times $5 + \log_{10}(L/L_\odot)$ this stays
 ## 3 Proto star.
 
 The way i would like this to work is that we will give the option to the user to "buy" into the star at the protostar stage. There will be news surrounding this in game. A protostar will have attached to it a constantly updating "predicted value" per share. The real value may very well be that value or it might deviate significantly depedning on market conditions or observational error.
+
+## 4 Supernovae
+
+I would like it that M,K and G type stars go from giant straight to its remnant phase, everything else will supernova.
+
+Supernova will see a temporary $\times 3$ increase in price until a given point. after this given point in time the price should reasonably quickly decay to a value to illustrate the formation of a stellar remnant.
+
+Type M, G, K become white dwarfs. Type F,A become neutron stars Type B and O become black holes
+
+| Remnant type | $T_{\mathrm{eff}}$ (K) | $\log_{10}(L/L_\odot)+5$ | $M_{\mathrm{rem}}/M_\odot$ |
+|:-------------|----------------------:|------------------------:|--------------------------:|
+| White dwarf | 4,000 to 150,000 | 0.00 to 7.00 | 0.2 to 1.3 |
+| Neutron star | $10^5$ to $3 \times 10^6$ | 0.00 to 6.00 | 1.1 to 2.3 |
+
+**Table 5:** Illustrative surface temperatures, shifted logarithmic thermal bolometric luminosities and current masses of cooling stellar remnants. These age-dependent ranges exclude accretion-powered emission, non-thermal pulsar emission and magnetar activity.
+
+Black holes have a Luminosity of 0 therefore their price should be 0 forever. After an initial supernova, the price should very slowly fall for about 30 seconds plus or minus 3 seconds. Then a sharp linear decrease tending towards the price of the Giants' associated remnant based on its type. This applies to all stars that experience supernova (F,A,B,O). For stars that don't (M, K, G), a reasonably slow linear decrease to the associated stellar remnant
