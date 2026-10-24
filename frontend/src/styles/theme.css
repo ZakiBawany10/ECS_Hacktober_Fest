@@ -42,6 +42,15 @@ svg { flex-shrink: 0; }
 .header-caption { color: var(--muted); font-size: 10px; font-weight: 500; letter-spacing: .14em; text-transform: uppercase; }
 .header-status { display: flex; align-items: center; gap: 8px; margin-left: auto; font-family: var(--mono); font-size: 10px; color: #a1ada3; }
 .status-dot { width: 6px; height: 6px; border: 1px solid #b1b6a2; border-radius: 50%; }
+.exchange-app[data-connection='live'] .header-status { color: var(--accent); }
+.exchange-app[data-connection='live'] .status-dot { border-color: var(--accent); background: var(--accent); box-shadow: 0 0 8px #b6f5bc38; }
+.exchange-app[data-connection='offline'] .status-dot,
+.exchange-app[data-connection='reconnecting'] .status-dot { border-color: #e1b780; background: #e1b780; }
+.connection-banner { display: flex; align-items: center; gap: 9px; margin: -9px 0 20px; padding: 13px 15px; border: 1px solid #3d4330; border-radius: 7px; background: #1b2118; color: #c2cbb4; font-size: 11px; line-height: 1.6; }
+.connection-banner .small-dot { background: #d5b477; }
+.connection-banner p { flex: 1; }
+.connection-banner button { display: inline-flex; align-items: center; gap: 7px; padding: 6px 9px; border: 1px solid #627455; border-radius: 4px; background: transparent; color: var(--accent); font-size: 10px; }
+.connection-banner button:hover { background: #2a3624; }
 .workspace { max-width: 1720px; margin: 0 auto; padding: 35px 32px 0; }
 .page-heading { display: flex; justify-content: space-between; align-items: center; gap: 24px; margin-bottom: 30px; }
 .section-kicker { margin-bottom: 10px; font-size: 9px; font-weight: 500; line-height: 1.3; text-transform: uppercase; letter-spacing: .15em; color: var(--muted); }
@@ -81,6 +90,8 @@ h1 > span { color: var(--accent); }
 .market-row { position: absolute; top: 0; left: 0; display: grid; grid-template-columns: 32px 28px minmax(0, 1fr) auto; align-items: center; gap: 8px; width: 100%; height: 83px; padding: 0 16px; text-align: left; background: transparent; border: 0; border-bottom: 1px solid #263028; transition: transform 480ms cubic-bezier(.2,.8,.2,1), background 180ms ease; }
 .market-row:hover { background: #1a241b; }
 .market-row.is-selected { background: #222e21; box-shadow: inset 2px 0 0 var(--accent); }
+.market-row[data-stage='supernova'] { background: #2a2318; }
+.market-row[data-stage='supernova'].is-selected { box-shadow: inset 2px 0 0 #f7c57e; }
 .market-rank { display: flex; flex-direction: column; gap: 5px; align-items: flex-start; color: #899b84; font-family: var(--mono); font-size: 10px; }
 .market-rank.placeholder-label { font-size: 9px; }
 .market-rank > span { font-size: 9px; line-height: 1; }
@@ -119,13 +130,15 @@ h1 > span { color: var(--accent); }
 button.asset-tag:hover { color: var(--accent); border-color: var(--accent); }
 
 /* Selected star */
-.detail-symbol { color: #adc4a0; padding: 5px 8px; border: 1px solid #394831; border-radius: 4px; font-size: 9px; }
+.detail-symbol { max-width: 48%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #adc4a0; padding: 5px 8px; border: 1px solid #394831; border-radius: 4px; font-size: 9px; }
 .star-overview { padding: 20px; }
 .star-identity { display: flex; align-items: center; gap: 11px; }
 .star-avatar-large { width: 41px; height: 41px; color: var(--accent); background: #222e21; border: 1px solid #3c4d33; border-radius: 10px; }
 .star-identity h3 { margin-bottom: 4px; font-size: 17px; font-weight: 450; }
 .star-identity h3.placeholder-label { font-size: 16px; }
 .star-identity p { font-size: 9px; color: #91a387; }
+.stage-label { letter-spacing: .025em; }
+.detail-panel[data-stage='supernova'] .star-avatar-large { background: #30271d; box-shadow: 0 0 20px #f5b35c17; }
 .selected-price { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; margin-top: 19px; color: #e8f3dc; font-family: var(--mono); font-size: 29px; line-height: 1.3; letter-spacing: -1px; }
 .selected-price .placeholder-label { font-size: 27px; }
 .price-unit { font-family: 'Inter', 'Segoe UI', sans-serif; font-size: 9px; letter-spacing: .1em; color: #83977b; }
@@ -207,6 +220,7 @@ button.asset-tag:hover { color: var(--accent); border-color: var(--accent); }
   .header-status { font-size: 8px; }
   .workspace { padding: 28px 14px 0; }
   .page-heading { margin-bottom: 24px; }
+  .connection-banner { flex-wrap: wrap; font-size: 10px; }
   h1 { max-width: 290px; font-size: 28px; letter-spacing: -1px; line-height: 1.3; }
   .terminal-layout { display: flex; flex-direction: column; gap: 20px; }
   .detail-panel { display: flex; }

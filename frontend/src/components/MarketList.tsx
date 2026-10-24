@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { StarAsset } from '../market/types';
-import { percentageChange } from '../market/types';
+import { priceChange } from '../market/types';
 import Icon from './Icon';
 
 interface MarketListProps {
@@ -18,14 +18,15 @@ export default function MarketList({ assets, selectedAssetId, selectedPlaceholde
   const [sortBy, setSortBy] = useState<'price' | 'change'>('price');
   const [query, setQuery] = useState('');
   const sorted = [...(assets ?? [])].sort((a, b) => {
-    const difference = sortBy === 'price' ? b.price - a.price : percentageChange(b) - percentageChange(a);
+    const difference = sortBy === 'price' ? b.price - a.price : (priceChange(b) ?? 0) - (priceChange(a) ?? 0);
     return difference || a.name.localeCompare(b.name);
   });
   const previousRanks = new Map([...(assets ?? [])].sort((a, b) => {
-    const previousChange = (asset: StarAsset) => asset.previousClose > 0 ? (asset.previousPrice - asset.previousClose) / asset.previousClose : 0;
-    return (sortBy === 'price' ? b.previousPrice - a.previousPrice : previousChange(b) - previousChange(a)) || a.name.localeCompare(b.name);
+    return (sortBy === 'price'
+      ? (b.previousPrice ?? b.price) - (a.previousPrice ?? a.price)
+      : (b.previousChange ?? priceChange(b) ?? 0) - (a.previousChange ?? priceChange(a) ?? 0)) || a.name.localeCompare(b.name);
   }).map((asset, index) => [asset.id, index]));
-  const ranked = sorted.map((asset, index) => ({ asset, rank: index + 1, movement: (previousRanks.get(asset.id) ?? index) - index }));
+  const ranked = sorted.map((asset, index) => ({ asset, rank: index + 1, movement: (previousRanks.get(asset.id) ?? index) - index, change: priceChange(asset) }));
   const matches = ranked.filter(({ asset }) => `${asset.name} ${asset.symbol}`.toLowerCase().includes(query.trim().toLowerCase()));
   const placeholder = assets === undefined;
 
@@ -39,7 +40,7 @@ export default function MarketList({ assets, selectedAssetId, selectedPlaceholde
         <label className="search-field"><Icon name="search" size={16} /><input type="search" aria-label="Search stars" placeholder="Search stars" value={query} onChange={(event) => setQuery(event.target.value)} disabled={placeholder} /></label>
         <div className="market-sort"><span>Rank by</span><div className="segmented-control" role="group" aria-label="Market ranking"><button type="button" aria-pressed={sortBy === 'price'} onClick={() => setSortBy('price')}>Price</button><button type="button" aria-pressed={sortBy === 'change'} onClick={() => setSortBy('change')}>Change</button></div></div>
       </div>
-      <div className="market-column-labels"><span>Rank / star</span><span>Price / change</span></div>
+      <div className="market-column-labels"><span>Rank / star</span><span>Price / tick change</span></div>
       <div className="market-list-scroll">
         <div className="market-list" style={{ height: (placeholder ? 7 : matches.length) * ROW_HEIGHT }}>
           {placeholder ? Array.from({ length: 7 }, (_, index) => (
@@ -49,12 +50,12 @@ export default function MarketList({ assets, selectedAssetId, selectedPlaceholde
               <span className="market-star"><strong className="placeholder-label">{'{star name}'}</strong><span className="placeholder-label">{'{symbol}'}</span></span>
               <span className="market-price"><strong className="placeholder-label">{'{star price}'}</strong><span className="placeholder-label">{'{price change}'}</span></span>
             </button>
-          )) : matches.map(({ asset, rank, movement }, index) => (
-            <button type="button" key={asset.id} className={`market-row${selectedAssetId === asset.id ? ' is-selected' : ''}`} style={{ transform: `translateY(${index * ROW_HEIGHT}px)` }} onClick={() => onSelect(asset.id)} aria-pressed={selectedAssetId === asset.id}>
+          )) : matches.map(({ asset, rank, movement, change }, index) => (
+            <button type="button" key={asset.id} className={`market-row${selectedAssetId === asset.id ? ' is-selected' : ''}`} data-stage={asset.stage} style={{ transform: `translateY(${index * ROW_HEIGHT}px)` }} onClick={() => onSelect(asset.id)} aria-pressed={selectedAssetId === asset.id}>
               <span className="market-rank">{rank}<span className={movement > 0 ? 'value-up' : movement < 0 ? 'value-down' : ''} aria-label={movement > 0 ? `Up ${movement} ranks` : movement < 0 ? `Down ${-movement} ranks` : 'Rank unchanged'}>{movement !== 0 ? <Icon name={movement > 0 ? 'arrow-up' : 'arrow-down'} size={11} /> : '—'}</span></span>
-              <span className="star-avatar"><Icon name="orbit" size={22} /></span>
-              <span className="market-star"><strong>{asset.name}</strong><span>{asset.symbol}</span></span>
-              <span className="market-price"><strong>{PRICE.format(asset.price)}</strong><span className={percentageChange(asset) > 0 ? 'value-up' : percentageChange(asset) < 0 ? 'value-down' : ''}>{percentageChange(asset) > 0 ? '+' : ''}{percentageChange(asset).toFixed(2)}%</span></span>
+              <span className="star-avatar" style={{ color: asset.color }}><Icon name="orbit" size={22} /></span>
+              <span className="market-star"><strong>{asset.name}</strong><span>{asset.classification}</span></span>
+              <span className="market-price"><strong>{PRICE.format(asset.price)}</strong><span className={(change ?? 0) > 0 ? 'value-up' : (change ?? 0) < 0 ? 'value-down' : ''}>{change === null ? '—' : `${change > 0 ? '+' : ''}${PRICE.format(change)} CR`}</span></span>
             </button>
           ))}
         </div>

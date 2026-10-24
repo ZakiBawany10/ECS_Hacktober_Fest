@@ -5,7 +5,7 @@ export interface Candle {
   high: number;
   low: number;
   close: number;
-  volume: number;
+  volume?: number;
 }
 
 export type StarCategory = 'Main sequence' | 'Giant' | 'Remnant' | 'Nebula';
@@ -16,16 +16,19 @@ export interface StarAsset {
   name: string;
   category: StarCategory;
   classification: string;
+  stage: string;
+  spectralType: string;
+  temperature: number;
   color: string;
   price: number;
-  previousClose: number;
-  previousPrice: number;
+  previousPrice: number | null;
+  previousChange?: number | null;
   history: Candle[];
   luminosity: number;
-  radius: number;
+  radius?: number;
   mass: number;
-  description: string;
-  signal: string;
+  description?: string;
+  signal?: string;
 }
 
 export type NewsCategory = 'Breaking' | 'Observation' | 'Signal' | 'Market';
@@ -42,13 +45,16 @@ export interface NewsHeadline {
 
 export interface MarketView {
   assets: StarAsset[];
-  news: NewsHeadline[];
+  news?: NewsHeadline[];
   updatedAt: number;
   tick: number;
 }
 
 export type CandleInterval = '1m' | '5m' | '15m';
 
-export function percentageChange(asset: Pick<StarAsset, 'price' | 'previousClose'>): number {
-  return asset.previousClose > 0 ? ((asset.price - asset.previousClose) / asset.previousClose) * 100 : 0;
+export type MarketConnectionStatus = 'connecting' | 'live' | 'reconnecting' | 'offline';
+
+/** Absolute credit change between observed server ticks, not a market-close return. */
+export function priceChange(asset: Pick<StarAsset, 'price' | 'previousPrice'>): number | null {
+  return asset.previousPrice === null ? null : asset.price - asset.previousPrice;
 }
