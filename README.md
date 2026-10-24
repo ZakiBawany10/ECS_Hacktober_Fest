@@ -5,7 +5,6 @@ Minimal boilerplate for separate frontend and backend work.
 - [Frontend](frontend/README.md): React + Vite + TypeScript. Start in `frontend/src/App.tsx`.
 - [Backend](backend/README.md): FastAPI. Start in `backend/app/main.py`.
 - [Project plan](docs/STAR_MARKET_SPEC.md): design reference for later implementation.
-- [AI teammate guidance](AGENTS.md): rough ownership and collaboration guidelines.
 
 ## Frontend
 
