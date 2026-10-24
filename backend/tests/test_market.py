@@ -169,6 +169,17 @@ def test_black_hole_price_sits_at_zero():
     assert [price for _, price in list(star.history)[-20:]] == [0.0] * 20
 
 
+def test_black_hole_cannot_be_traded():
+    market = make_market()
+    player = market.join("zaki")
+    market.trade(player.id, "kestrel", "buy", 1)
+    walk_lifecycle(market, "kestrel")
+    for side in ("buy", "sell"):
+        with pytest.raises(MarketError, match="black hole"):
+            market.trade(player.id, "kestrel", side, 1)
+    assert player.holdings == {"kestrel": 1}
+
+
 def test_supernova_snaps_to_new_luminosity():
     market = make_market()
     star = market.stars["kestrel"]

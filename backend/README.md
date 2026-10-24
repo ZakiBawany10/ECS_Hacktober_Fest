@@ -79,7 +79,7 @@ Portfolio { player_id, nickname, cash, holdings: {asset_id: qty}, net_worth }
 ```
 
 Errors use FastAPI's `{"detail": ...}` body: 400 for a rejected trade (not
-enough cash, shares or holdings), 404 for an unknown player/asset, 422 for an
+enough cash, shares or holdings, or the star is a black hole), 404 for an unknown player/asset, 422 for an
 invalid body. Quantities may be fractional; trades fill at the current price.
 
 **WebSocket `/ws`** (server → client):

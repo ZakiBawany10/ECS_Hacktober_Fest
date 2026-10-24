@@ -148,6 +148,8 @@ class Market:
         star = self.get_star(asset_id)
         if qty <= 0:
             raise MarketError("Quantity must be positive")
+        if star.stage in DARK_STAGES:
+            raise MarketError(f"{star.name} is a black hole and can't be traded")
 
         cost = qty * star.price
         if side == "buy":
