@@ -53,7 +53,7 @@ For now, each star has 1000 shares attached to it.
 
 the way i would like to add the next stages of life to the main sequence is to assign types of "Giant star" to the types of main sequence.
 
-M,K,G, become red giants F,B beecome Blue Giants B become Red Hyper Giants O become Blue Hyper Giants
+M,K,G, become red giants F,B become Blue Giants B become Red Hyper Giants O become Blue Hyper Giants
 
 the values for our adjusted luminosities and therefore the price per share
 
@@ -87,4 +87,10 @@ Type M, G, K become white dwarfs. Type F,A become neutron stars Type B and O bec
 
 **Table 5:** Illustrative surface temperatures, shifted logarithmic thermal bolometric luminosities and current masses of cooling stellar remnants. These age-dependent ranges exclude accretion-powered emission, non-thermal pulsar emission and magnetar activity.
 
-Black holes have a Luminosity of 0 therefore their price should be 0 forever. After an initial supernova, the price should very slowly fall for about 30 seconds plus or minus 3 seconds. Then a sharp linear decrease tending towards the price of the Giants' associated remnant based on its type. This applies to all stars that experience supernova (F,A,B,O). For stars that don't (M, K, G), a reasonably slow linear decrease to the associated stellar remnant
+Black holes have a Luminosity of 0 therefore their price should be 0 forever. After an initial supernova, the price should very slowly fall for about 30 seconds plus or minus 3 seconds. Then a sharp linear decrease tending towards the price of the Giants' associated remnant based on its type. This applies to all stars that experience supernova (F,A,B,O). For stars that don't (M, K, G), a reasonably slow linear decrease to the associated stellar remnant.
+
+## 5 Events
+
+### 5.1 Dyson Sphere
+
+At any point in the game an alien civilization can build a dyson sphere around any star. the chance of this happening is low at any given time but atleast 1 should happen in any given game. Max 2 at the same time. During one of these events a news flash will pop up and the price will tend downwards. in the case that the sphere is completed the price should tend to 0. If it doesn't the price should return to its previous baseline. the chance of a fully completed dyson sphere should be about 20%. The price should move quite quickly at first and slow down as more gets built. if the dyson sphere does not get built the price should rise sharply. the length of time a dyson sphere takes to build in total is about 5 minutes. At any point in this build time, the progress can stop and the dyson sphere can be lifted and the price can act as I've previously said. The player should be updated frequently about the progress to inform their decisions. use in game made up sources. these can include both alien and human news channels. News should not always be 100% accurate and bias can be introduced depending on the channel. just not too much as to completely conflict or lie.
