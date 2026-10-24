@@ -53,7 +53,7 @@ For now, each star has 1000 shares attached to it.
 
 the way i would like to add the next stages of life to the main sequence is to assign types of "Giant star" to the types of main sequence.
 
-M,K,G, become red giants F,B beecome Blue Giants B become Red Hyper Giants O become Blue Hyper Giants
+M,K,G, become red giants F,A beecome Blue Giants B become Red Hyper Giants O become Blue Hyper Giants
 
 the values for our adjusted luminosities and therefore the price per share
 
