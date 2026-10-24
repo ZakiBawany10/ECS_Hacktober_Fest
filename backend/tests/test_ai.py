@@ -7,6 +7,7 @@ import pytest
 from app.ai.client import GemmaClient, GemmaError
 from app.ai.prompts import (
     EVENT_FALLBACKS,
+    OUTLETS,
     EVENT_NOTES,
     FALLBACKS,
     STAGE_LABELS,
@@ -74,7 +75,7 @@ def test_every_later_stage_has_a_note_and_fallback():
 def run_job(client, deadline_seconds=5.0) -> list[Headline]:
     published: list[Headline] = []
 
-    async def on_ready(headline):
+    async def on_ready(headline, outlet):
         published.append(headline)
 
     async def go():
@@ -142,3 +143,21 @@ def test_worker_collects_valid_star_names():
 
 def test_worker_survives_gemma_failing_to_name_stars():
     assert run_names_job(FakeChatClient(GemmaError("down")), avoid=[]) == []
+
+
+def test_each_headline_comes_from_an_outlet_in_its_voice():
+    client = FakeChatClient()
+    outlets = []
+
+    async def on_ready(headline, outlet):
+        outlets.append(outlet)
+
+    async def go():
+        worker = AIWorker(client)
+        worker.request_headline("Write it.", stage_change_fallback("Altra", "supernova"), on_ready, OUTLETS[3])
+        await worker.handle(worker.queue.get_nowait())
+
+    asyncio.run(go())
+    assert outlets == [OUTLETS[3]] and OUTLETS[3].side == "alien"
+    assert "You are Zr'kth Construction Authority, an alien news outlet" in client.systems[0]
+    assert {outlet.side for outlet in OUTLETS} == {"human", "alien"}

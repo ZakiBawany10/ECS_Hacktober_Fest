@@ -174,13 +174,27 @@ stage     "protostar" | "main_sequence" | "red_giant" | "blue_giant" | "red_hype
           | "black_hole"
 Portfolio { player_id, nickname, cash, holdings: {asset_id: qty}, net_worth }
 NewsItem  { id, t, kind: "lifecycle" | "event" | "rumour" | "system", headline,
-            body, asset_ids: string[] }
+            body, asset_ids: string[], source, side: "human" | "alien" }
 ```
 
 `news` in `/state` holds the last 50 items, oldest first. `t` is the tick the
 news is about, which can be a tick or two before it was published. `lifecycle`
 items cover stage changes (including forced ones) and `event` items cover
 events; `rumour` and `system` aren't used yet.
+
+Each item is reported by one of five outlets, picked at random (section 5.0.5 of
+the pricing doc), and Gemma writes in its voice. `source` is the outlet's name:
+
+| `source` | `side` | Voice |
+|---|---|---|
+| Galactic Financial Times | human | measured, market-focused |
+| StarWire | human | sensational tabloid |
+| Orbital Observatory Bulletin | human | cautious, scientific |
+| Zr'kth Construction Authority | alien | imperial propaganda |
+| Free Xeno Press | alien | sceptical dissident press |
+
+Outlets spin the facts but never change what happened or which way a price is
+moving.
 
 Errors use FastAPI's `{"detail": ...}` body: 400 for a rejected trade (not
 enough cash, shares or holdings, or the star is a black hole), 404 for an unknown player/asset, 422 for an
@@ -202,7 +216,7 @@ curl -X POST localhost:8000/director/force_stage -H 'Content-Type: application/j
 ```json
 {"type": "tick", "t": 12, "assets": [{"id": "sol-nova", "stage": "main_sequence", "price": 500.4, "L": 1.002}]}
 {"type": "leaderboard", "rows": [{"nickname": "zaki", "net_worth": 10012.5}]}
-{"type": "news", "item": {"id": "…", "t": 41, "kind": "lifecycle", "headline": "Kestrel goes supernova", "body": "…", "asset_ids": ["kestrel"]}}
+{"type": "news", "item": {"id": "…", "t": 41, "kind": "lifecycle", "headline": "Kestrel goes supernova", "body": "…", "asset_ids": ["kestrel"], "source": "StarWire", "side": "human"}}
 {"type": "listed", "asset": {"id": "fathom", "stage": "protostar", "…": "a full Asset"}}
 {"type": "delisted", "asset_id": "kestrel"}
 ```

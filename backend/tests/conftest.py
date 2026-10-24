@@ -10,9 +10,11 @@ class FakeChatClient:
     def __init__(self, reply=None):
         self.reply = reply if reply is not None else {"headline": "Fake headline", "body": "Fake body."}
         self.prompts: list[str] = []
+        self.systems: list[str] = []
 
     async def chat_json(self, system, user, schema):
         self.prompts.append(user)
+        self.systems.append(system)
         if isinstance(self.reply, Exception):
             raise self.reply
         return self.reply

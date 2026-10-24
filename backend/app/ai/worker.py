@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import random
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -14,9 +15,12 @@ from .client import ChatClient, GemmaError
 from .prompts import (
     HEADLINE_SCHEMA,
     NAMES_SCHEMA,
+    OUTLETS,
     SYSTEM,
     Headline,
+    Outlet,
     names_prompt,
+    outlet_system_prompt,
     stage_change_fallback,
     stage_change_prompt,
     valid_names,
@@ -24,7 +28,7 @@ from .prompts import (
 
 log = logging.getLogger(__name__)
 
-OnHeadline = Callable[[Headline], Awaitable[None]]
+OnHeadline = Callable[[Headline, Outlet], Awaitable[None]]
 
 
 @dataclass
@@ -33,6 +37,7 @@ class HeadlineJob:
     fallback: Headline
     deadline: float  # time.monotonic() after which the fallback is published instead
     on_ready: OnHeadline
+    outlet: Outlet  # who reports it; the fallback is credited to them too
 
 
 @dataclass
@@ -47,10 +52,16 @@ class AIWorker:
         self.deadline_seconds = deadline_seconds
         self.queue: asyncio.Queue[HeadlineJob | NamesJob] = asyncio.Queue()
         self.names_pending = False
+        self.rng = random.Random()
 
-    def request_headline(self, user_prompt: str, fallback: Headline, on_ready: OnHeadline) -> None:
-        """Queue a headline. on_ready gets Gemma's, or the fallback once the deadline passes."""
-        self.queue.put_nowait(HeadlineJob(user_prompt, fallback, time.monotonic() + self.deadline_seconds, on_ready))
+    def request_headline(
+        self, user_prompt: str, fallback: Headline, on_ready: OnHeadline, outlet: Outlet | None = None
+    ) -> None:
+        """Queue a headline from an outlet (random by default). on_ready gets Gemma's, or the fallback once
+        the deadline passes."""
+        outlet = outlet or self.rng.choice(OUTLETS)
+        deadline = time.monotonic() + self.deadline_seconds
+        self.queue.put_nowait(HeadlineJob(user_prompt, fallback, deadline, on_ready, outlet))
 
     def request_stage_headline(
         self, name: str, spectral_type: str, old_stage: Stage, new_stage: Stage, on_ready: OnHeadline, note: str = ""
@@ -97,6 +108,7 @@ class AIWorker:
             log.warning("Gemma couldn't name stars; new stars will use fallback names: %r", exc)
         finally:
             self.names_pending = False
+        self.rng = random.Random()
 
     async def handle_headline(self, job: HeadlineJob) -> None:
         headline = job.fallback
@@ -104,9 +116,10 @@ class AIWorker:
         if remaining > 0:
             try:
                 reply = await asyncio.wait_for(
-                    self.client.chat_json(SYSTEM, job.user_prompt, HEADLINE_SCHEMA), remaining
+                    self.client.chat_json(outlet_system_prompt(job.outlet), job.user_prompt, HEADLINE_SCHEMA),
+                    remaining,
                 )
                 headline = Headline.model_validate(reply)
             except (GemmaError, TimeoutError, ValidationError) as exc:
                 log.warning("Using the template headline: %r", exc)
-        await job.on_ready(headline)
+        await job.on_ready(headline, job.outlet)

@@ -1,6 +1,7 @@
 """What Gemma is asked, the JSON it must reply with, and the templates used when it can't."""
 
 import re
+from dataclasses import dataclass
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, StringConstraints
@@ -9,11 +10,60 @@ from ..events import EventType
 from ..lifecycle import STAGE_LABELS, Stage
 
 SYSTEM = (
-    "You write breaking-news items for Star Market, a live stock market game where the assets are stars "
-    "and a star's share price follows its brightness. Tone: a punchy financial-news wire, lightly playful. "
-    "You may say which way a price is heading, but never quote prices, percentages or share counts. "
-    "Reply with JSON only."
+    "You write for Star Market, a live stock market game where the assets are stars and a star's share "
+    "price follows its brightness. Reply with JSON only."
 )
+
+
+@dataclass(frozen=True)
+class Outlet:
+    """A news source in the game, from section 5.0.5 of the pricing doc. Each item gets one at random."""
+
+    name: str
+    side: Literal["human", "alien"]
+    voice: str
+
+
+OUTLETS = [
+    Outlet(
+        "Galactic Financial Times",
+        "human",
+        "You are measured and market-focused, like a serious financial paper: calm, precise, about what it means for investors.",
+    ),
+    Outlet(
+        "StarWire",
+        "human",
+        "You are a fast, sensational tabloid: breathless, exaggerated, fond of exclamation marks and puns.",
+    ),
+    Outlet(
+        "Orbital Observatory Bulletin",
+        "human",
+        "You are a cautious scientific bulletin: you explain the astrophysics plainly and hedge ('data suggests...').",
+    ),
+    Outlet(
+        "Zr'kth Construction Authority",
+        "alien",
+        "You are the official state feed of the Zr'kth, an alien empire of builders. Write like an imperial "
+        "ministry: grandiose propaganda that presents every event as part of the Zr'kth's grand design, calls "
+        "humans 'carbon traders', and praises 'the glorious Zr'kth'.",
+    ),
+    Outlet(
+        "Free Xeno Press",
+        "alien",
+        "You are a dissident alien underground press: sceptical and sardonic. You call the Zr'kth 'the "
+        "regime', distrust human markets too, and always point out what could go wrong.",
+    ),
+]
+
+
+def outlet_system_prompt(outlet: Outlet) -> str:
+    return (
+        f"You are {outlet.name}, a{'n' if outlet.side == 'alien' else ''} {outlet.side} news outlet covering "
+        "Star Market, a live stock market game where the assets are stars and a star's share price follows its "
+        f"brightness. {outlet.voice} Write in that voice, but stick to the facts you are given: never change "
+        "what happened or which way a price is moving. Never quote prices, percentages or share counts. "
+        "Reply with JSON only."
+    )
 
 # Ollama constrains Gemma's output to this schema.
 HEADLINE_SCHEMA = {

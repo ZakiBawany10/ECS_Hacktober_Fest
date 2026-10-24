@@ -121,6 +121,8 @@ class News:
     headline: str
     body: str
     asset_ids: list[str]
+    source: str  # the outlet reporting it
+    side: Literal["human", "alien"]
 
 
 @dataclass
@@ -371,7 +373,16 @@ class Market:
             star.history.append((self.tick, star.price))
         return report
 
-    def add_news(self, kind: NewsKind, headline: str, body: str, asset_ids: list[str], t: int | None = None) -> News:
+    def add_news(
+        self,
+        kind: NewsKind,
+        headline: str,
+        body: str,
+        asset_ids: list[str],
+        t: int | None = None,
+        source: str = "Star Market Exchange",
+        side: Literal["human", "alien"] = "human",
+    ) -> News:
         """Publish a news item. t defaults to now; pass the tick an event happened if it was earlier."""
         news = News(
             id=uuid.uuid4().hex,
@@ -380,6 +391,8 @@ class Market:
             headline=headline,
             body=body,
             asset_ids=asset_ids,
+            source=source,
+            side=side,
         )
         self.news.append(news)
         return news

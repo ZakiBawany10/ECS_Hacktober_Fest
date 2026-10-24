@@ -9,6 +9,7 @@ from .ai.client import GemmaClient
 from .ai.prompts import (
     SPECTRAL_LOOKS,
     Headline,
+    Outlet,
     event_fallback,
     event_prompt,
     star_news_fallback,
@@ -111,6 +112,8 @@ def news_out(news: News) -> NewsItem:
         headline=news.headline,
         body=news.body,
         asset_ids=list(news.asset_ids),
+        source=news.source,
+        side=news.side,
     )
 
 
@@ -121,8 +124,10 @@ NAME_POOL_LOW = 3
 def publisher(kind: NewsKind, asset_ids: list[str], t: int):
     """Return a callback that publishes a finished headline to the feed and the WebSocket."""
 
-    async def publish(headline: Headline) -> None:
-        news = market.add_news(kind, headline.headline, headline.body, asset_ids, t=t)
+    async def publish(headline: Headline, outlet: Outlet) -> None:
+        news = market.add_news(
+            kind, headline.headline, headline.body, asset_ids, t=t, source=outlet.name, side=outlet.side
+        )
         await connections.broadcast(NewsMessage(item=news_out(news)))
 
     return publish

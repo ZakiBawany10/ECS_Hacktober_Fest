@@ -87,6 +87,8 @@ class NewsItem(BaseModel):
     headline: str
     body: str
     asset_ids: list[str]
+    source: str  # the outlet reporting it, such as "StarWire"
+    side: Literal["human", "alien"]
 
 
 class StateSnapshot(BaseModel):

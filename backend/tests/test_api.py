@@ -73,6 +73,8 @@ def test_stage_change_news_reaches_state(monkeypatch, fake_gemma):
     assert news["kind"] == "lifecycle"
     assert news["asset_ids"] == ["altra"]
     assert (news["headline"], news["body"]) == ("Altra swells", "Up it goes.")
+    assert news["side"] in ("human", "alien") and news["source"]
+    assert news["source"] in fake_gemma.systems[0]
     assert "main-sequence star into a blue giant" in fake_gemma.prompts[0]
 
 
