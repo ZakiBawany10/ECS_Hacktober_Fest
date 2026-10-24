@@ -207,8 +207,8 @@ button.asset-tag:hover { color: var(--accent); border-color: var(--accent); }
   .detail-panel .column-header { grid-column: 1 / -1; }
   .star-overview { grid-column: 1; }
   .detail-panel .chart-panel { grid-column: 2; grid-row: 2 / span 3; border-left: 1px solid var(--line); border-top: 0; border-bottom: 0; }
-  .star-fundamentals { grid-column: 1; }
-  .star-brief { grid-column: 1; margin-top: 0; }
+  .star-fundamentals { grid-column: 1; grid-row: 3; }
+  .star-brief { grid-column: 1; grid-row: 4; margin-top: 0; }
   .page-description { display: none; }
 }
 

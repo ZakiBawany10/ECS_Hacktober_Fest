@@ -3,11 +3,18 @@ import Icon from './components/Icon';
 import MarketList from './components/MarketList';
 import NewsFeed from './components/NewsFeed';
 import StarDetails from './components/StarDetails';
+import PlayerPanel from './components/PlayerPanel';
+import TradeTicket from './components/TradeTicket';
+import DemoControls from './components/DemoControls';
 import { useLiveMarket } from './market/useLiveMarket';
+import { usePlayerSession } from './player/usePlayerSession';
 
 export default function App() {
   const { market, status, error, retry } = useLiveMarket();
+  const session = usePlayerSession(status);
+  const [directorEnabled] = useState(() => new URLSearchParams(window.location.search).get('director') === '1');
   const [selectedAssetId, setSelectedAssetId] = useState<string>();
+  const [orderAssetId, setOrderAssetId] = useState<string>();
   const [selectedPlaceholder, setSelectedPlaceholder] = useState(0);
   const assets = market?.assets;
   const selectedAsset = assets?.find((asset) => asset.id === selectedAssetId)
@@ -24,6 +31,11 @@ export default function App() {
     setSelectedAssetId(id);
   }
 
+  async function placeOrder(assetId: string, side: 'buy' | 'sell', quantity: number) {
+    setOrderAssetId(assetId);
+    return session.trade(assetId, side, quantity);
+  }
+
   return (
     <div className="exchange-app" data-connection={status}>
       <a className="skip-link" href="#market">Skip to the market</a>
@@ -36,10 +48,14 @@ export default function App() {
         <div className="page-heading"><div><p className="section-kicker">A different kind of market</p><h1>Keep your eyes on the stars<span>.</span></h1></div><p className="page-description">Follow the market. Read the signals.<br />Find your next move.</p></div>
         {status !== 'live' && <div className="connection-banner" role="status"><span className="small-dot" /><p>{status === 'connecting' ? 'Connecting to the market…' : market ? 'Connection interrupted. Showing the last received prices.' : 'The market feed is unavailable. Try reconnecting.'}</p>{(status === 'offline' || status === 'reconnecting') && <button type="button" onClick={retry}>Reconnect <Icon name="arrow-right" size={13} /></button>}</div>}
         {status === 'live' && error && <div className="connection-banner" role="status"><p>{error}</p><button type="button" onClick={retry}>Retry <Icon name="arrow-right" size={13} /></button></div>}
+        <PlayerPanel session={session} assets={assets} connected={status === 'live'} onSelectAsset={selectAsset} />
+        {directorEnabled && <DemoControls key={selectedAsset?.id} asset={selectedAsset} connected={status === 'live'} />}
         <div className="terminal-layout">
           <MarketList assets={assets} selectedAssetId={selectedAsset?.id} selectedPlaceholder={selectedPlaceholder} onSelect={selectAsset} onSelectPlaceholder={setSelectedPlaceholder} />
           <NewsFeed items={market?.news} onSelectAsset={selectAsset} />
-          <StarDetails asset={selectedAsset} />
+          <StarDetails asset={selectedAsset}>
+            <TradeTicket key={selectedAsset?.id ?? 'empty'} asset={selectedAsset} portfolio={session.portfolio} hasSession={session.hasSession} busy={session.busy === 'trade'} disabled={status !== 'live' || session.stale || session.busy !== null} onTrade={placeOrder} feedback={orderAssetId === selectedAsset?.id ? session.error ?? session.notice : null} feedbackError={Boolean(session.error)} />
+          </StarDetails>
         </div>
         <footer className="workspace-footer"><span><Icon name="orbit" size={13} /> {market ? `Simulation tick ${market.tick}` : 'An entire universe of possibility.'}</span><span>STAR MARKET <span className="footer-cross">✦</span> OBSERVE. ANTICIPATE. TRADE.</span></footer>
       </main>

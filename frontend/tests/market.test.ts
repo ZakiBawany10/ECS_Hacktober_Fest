@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import {
   applyMarketTick,
@@ -64,6 +65,32 @@ test('new ticks retain birth data while changing lifecycle, prices and prior obs
   assert.equal(second.market.updatedAt, 1400);
   assert.notEqual(first.market.assets[0].color, initial.market.assets[0].color);
   assert.equal(initial.market.assets[0].price, 500);
+});
+
+test('every backend lifecycle stage works in snapshots and live tick updates', () => {
+  const lifecycle = readFileSync(new URL('../../backend/app/lifecycle.py', import.meta.url), 'utf8');
+  const stageLiteral = lifecycle.match(/^Stage\s*=\s*Literal\[([\s\S]*?)\]/m);
+  assert.ok(stageLiteral, 'Backend lifecycle must declare its Stage literal.');
+  const backendStages = [...stageLiteral[1].matchAll(/["']([^"']+)["']/g)].map((match) => match[1]);
+  assert.ok(backendStages.length > 0, 'Backend Stage literal must contain lifecycle stages.');
+
+  let live = createMarketState(snapshot());
+  for (const [index, stage] of backendStages.entries()) {
+    const expectedLabel = stage.replaceAll('_', ' ').replace(/^./, (letter) => letter.toUpperCase());
+    const parsed = parseSnapshot({ ...snapshot(), assets: [{ ...snapshot().assets[0], stage }] });
+    const initial = createMarketState(parsed).market.assets[0];
+    assert.equal(initial.stage, stage);
+    assert.equal(initial.classification, expectedLabel);
+    assert.match(initial.color, /^#[0-9a-f]{6}$/i);
+
+    live = applyMarketTick(live, update(11 + index, 510 + index, stage));
+    assert.equal(live.market.assets[0].stage, stage);
+    assert.equal(live.market.assets[0].classification, expectedLabel);
+    assert.equal(live.market.assets[0].color, initial.color);
+  }
+
+  assert.throws(() => update(99, 600, 'red_supergiant'), /unsupported stellar stage/);
+  assert.throws(() => update(99, 600, 'unknown_stage'), /unsupported stellar stage/);
 });
 
 test('duplicate and out-of-order messages do not regress prices, baselines or chart state', () => {

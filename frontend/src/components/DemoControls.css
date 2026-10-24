@@ -1,0 +1,6 @@
+.demo-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px; padding: 16px 20px; margin-bottom: 20px; border: 1px dashed #596044; border-radius: 8px; background: #1b2017; }
+.demo-controls .section-kicker { margin-bottom: 5px; color: #c3c9a5; }
+.demo-controls p { color: var(--muted); font-size: 11px; line-height: 1.7; }
+.demo-controls button { padding: 10px 14px; color: #d4dfb4; background: #303a25; border: 1px solid #66784c; border-radius: 5px; font-size: 11px; }
+.demo-controls button:disabled { opacity: .5; cursor: not-allowed; }
+.demo-controls .demo-message { flex-basis: 100%; color: #c5d7b4; }

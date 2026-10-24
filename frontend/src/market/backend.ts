@@ -5,7 +5,9 @@ import type { MarketView, StarAsset, StarCategory } from './types.ts';
 const stages = {
   main_sequence: { label: 'Main sequence', category: 'Main sequence' },
   red_giant: { label: 'Red giant', category: 'Giant', color: '#fb9277' },
-  red_supergiant: { label: 'Red supergiant', category: 'Giant', color: '#ff785f' },
+  blue_giant: { label: 'Blue giant', category: 'Giant', color: '#a8c6ff' },
+  red_hypergiant: { label: 'Red hypergiant', category: 'Giant', color: '#ff785f' },
+  blue_hypergiant: { label: 'Blue hypergiant', category: 'Giant', color: '#80b0ff' },
   supernova: { label: 'Supernova', category: 'Remnant', color: '#f6e8ba' },
   planetary_nebula: { label: 'Planetary nebula', category: 'Nebula', color: '#b397ef' },
   white_dwarf: { label: 'White dwarf', category: 'Remnant', color: '#dbe8ff' },

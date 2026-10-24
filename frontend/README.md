@@ -10,8 +10,20 @@ are absolute CR differences from the previous received tick; the initial
 snapshot has no comparison baseline.
 
 News and star insights still use literal placeholder labels because the
-backend does not provide them. No generated prices, dates, headlines, or
-trading actions are included.
+backend does not provide them. Prices, balances and holdings come from the
+server; no generated prices, dates or headlines are included.
+
+Players can join with a nickname, buy and sell fractional shares, and see cash,
+net worth and holdings. The browser remembers the player ID; a server restart
+clears that session after the server reports the player is missing. Balances
+refresh every five seconds and after joining, trading or reconnecting.
+
+Order estimates use the latest displayed price. Trading pressure changes the
+execution price, so the server validates each order and returns the updated
+portfolio. The current API does not return an execution receipt. Black-hole
+orders and sells exceeding the displayed holdings are disabled. Rejected orders
+show the server's reason. Lost order responses are never retried automatically;
+the account must refresh before another order is allowed.
 
 Use Node.js 22.12+ and its included npm package manager. From this directory:
 
@@ -54,10 +66,41 @@ and `npm`. If PowerShell blocks `npm.ps1`, use `npm.cmd` in place of `npm`.
   preserves gaps, and does not invent timestamps or volume.
 - Lifecycle labels and colours follow the server stage. Spectral type and
   temperature are labelled as birth values because the server keeps them fixed.
+- `src/player/api.ts` validates player responses; `session.ts` handles persisted
+  identity and request ordering; `usePlayerSession.ts` handles polling and
+  reconnects. The server remains responsible for balances and fills.
 - `tests/` covers validation, snapshot/tick/history merging, server restart
-  handling, and candle aggregation. Tests use Node's built-in runner.
+  handling, candle aggregation, and player/order recovery. The stage compatibility
+  regression reads the backend's actual stage definitions. Tests use Node's
+  built-in runner; no extra test dependency is needed.
+
+## Demo controls
+
+Open `http://localhost:5173/?director=1` to show a control that advances the
+selected star to its next stage. It uses the existing
+`POST /director/force_stage` endpoint. Changes appear on the next market tick;
+terminal stages disable the button. This query flag only controls UI visibility,
+not access to the backend endpoint. The normal page hides these controls.
+
+## Backend teammate handoff
+
+These remain backend work; this frontend change does not alter server code:
+
+- Handle a positive sell quantity within the server's float tolerance when the
+  player has no holding. Currently, for example, selling `1e-10` unowned shares
+  reaches deletion of a missing dictionary entry and raises `KeyError`. The UI
+  blocks unowned sells, but the API should reject them consistently too.
+- Consider returning a trade receipt alongside the portfolio, including actual
+  filled quantity, unit price and total. The frontend currently confirms an
+  order and shows the returned balance without inventing an execution price.
+- Agree and implement the latest supernova price curves and remnant paths in
+  `docs/Main_sequence_pricing_data(1).md`. They differ from the current lifecycle
+  implementation; the frontend displays the stage/price received from the server.
+- News still needs a small agreed snapshot/message shape before connecting the
+  middle column.
 
 Vite proxies `/api/*` to `http://127.0.0.1:8000/*` and `/ws` to the backend
-WebSocket. Production hosting must route `/state`, `/assets/*`, and `/ws` to
-the backend on the frontend's origin. `npm run preview` only previews the static
-build; use `npm run dev` for the local API proxy.
+WebSocket. Production hosting must route `/state`, `/assets/*`, `/join`, `/trade`,
+`/portfolio/*`, `/director/*` and `/ws` to the backend on the frontend's origin.
+The built app uses those production paths; use `npm run dev` for the configured
+local API proxy.
