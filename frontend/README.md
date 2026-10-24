@@ -20,8 +20,15 @@ fresh snapshot; buffered live news is merged by ID so overlapping snapshots
 do not duplicate stories. Headlines can arrive after later price ticks because
 the model writes asynchronously. Expanding a story stays attached to its ID as
 new stories arrive. Events includes lifecycle changes and events; Rumours shows
-rumours. The current backend publishes lifecycle news only. Empty feeds show a
+rumours. The backend publishes lifecycle and event news. Empty feeds show a
 real empty state, and malformed news does not disconnect working prices.
+
+The selected star's candle chart marks related news within its visible history.
+Markers use real event ticks; grouped markers sit at their earliest story tick
+and offer each headline separately. Click a marker or its headline choice to
+open, reveal and focus that story in the news feed, including if a filter had
+hidden it. Closely spaced stories are grouped so their buttons stay usable on
+narrow charts. Markers do not imply that a story caused a particular price move.
 
 Players can join with a nickname, buy and sell fractional shares, and see cash,
 net worth and holdings. The browser remembers the player ID; a server restart
@@ -83,7 +90,8 @@ and `npm`. If PowerShell blocks `npm.ps1`, use `npm.cmd` in place of `npm`.
   identity and request ordering; `usePlayerSession.ts` handles polling and
   reconnects. The server remains responsible for balances and fills.
 - `tests/` covers validation, snapshot/tick/history merging, server restart
-  handling, candle aggregation, player/order recovery, and news ordering/replay.
+  handling, candle aggregation, player/order recovery, news ordering/replay, and
+  chart marker placement/grouping.
   Compatibility regressions read the backend's actual stage and news-kind
   definitions. Tests use Node's
   built-in runner; no extra test dependency is needed.

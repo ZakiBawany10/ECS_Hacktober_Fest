@@ -121,6 +121,168 @@
   stroke: var(--chart-down);
 }
 
+.chart-panel [data-kind='event'] {
+  --chart-news-color: #edb56c;
+}
+
+.chart-panel [data-kind='lifecycle'] {
+  --chart-news-color: #c1b1ec;
+}
+
+.chart-panel [data-kind='rumour'] {
+  --chart-news-color: #9ebed5;
+}
+
+.chart-panel .chart-news-guides line {
+  stroke: var(--chart-news-color, #b8c7be);
+  stroke-width: 1;
+  stroke-dasharray: 3 5;
+  opacity: .32;
+  vector-effect: non-scaling-stroke;
+}
+
+.chart-panel .chart-news-markers {
+  position: absolute;
+  top: 0;
+  right: 12px;
+  left: 12px;
+  height: 24px;
+  pointer-events: none;
+}
+
+.chart-panel .chart-news-marker {
+  position: absolute;
+  top: 0;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin: 0;
+  padding: 0;
+  transform: translateX(-50%);
+  color: var(--chart-news-color, #b8c7be);
+  background: #242d29;
+  border: 1px solid currentColor;
+  border-radius: 5px;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.chart-panel .chart-news-marker:hover,
+.chart-panel .chart-news-marker[aria-expanded='true'] {
+  background: #36443c;
+}
+
+.chart-panel .chart-news-marker-active {
+  box-shadow: 0 0 0 2px var(--chart-news-color, #b8c7be);
+}
+
+.chart-panel .chart-news-marker:focus-visible,
+.chart-panel .chart-news-list button:focus-visible {
+  outline: 2px solid var(--chart-mint);
+  outline-offset: 3px;
+}
+
+.chart-panel .chart-news-caption {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  padding: 10px 18px;
+  color: var(--chart-muted);
+  border-top: 1px solid var(--chart-border);
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.chart-panel .chart-news-caption > span:first-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #b8c7be;
+}
+
+.chart-panel .chart-news-caption i {
+  width: 6px;
+  height: 6px;
+  border: 1px solid currentColor;
+  border-radius: 2px;
+}
+
+.chart-panel .chart-news-list {
+  padding: 8px 12px 12px;
+  border-top: 1px solid var(--chart-border);
+}
+
+.chart-panel .chart-news-list-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 0 4px;
+  padding-left: 6px;
+  color: #a9b9af;
+  font-size: 10px;
+}
+
+.chart-panel .chart-news-list-heading button {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  color: var(--chart-muted);
+  background: transparent;
+  border: 0;
+  border-radius: 3px;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.chart-panel .chart-news-list ul {
+  max-height: 180px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chart-panel .chart-news-list li + li {
+  margin-top: 4px;
+}
+
+.chart-panel .chart-news-list li button {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 9px;
+  width: 100%;
+  min-height: 32px;
+  padding: 9px 7px;
+  color: #c9d3cd;
+  background: #1d2521;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: left;
+  cursor: pointer;
+}
+
+.chart-panel .chart-news-list li button:hover,
+.chart-panel .chart-news-list li button[aria-pressed='true'] {
+  border-color: var(--chart-news-color, #b8c7be);
+}
+
+.chart-panel .chart-news-story-tick {
+  color: var(--chart-news-color, #b8c7be);
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 9px;
+  white-space: nowrap;
+}
+
 .chart-panel .chart-empty {
   position: absolute;
   inset: 0 14% 0 0;

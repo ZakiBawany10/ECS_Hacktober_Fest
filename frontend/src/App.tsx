@@ -15,6 +15,8 @@ export default function App() {
   const [directorEnabled] = useState(() => new URLSearchParams(window.location.search).get('director') === '1');
   const [selectedAssetId, setSelectedAssetId] = useState<string>();
   const [orderAssetId, setOrderAssetId] = useState<string>();
+  const [openStory, setOpenStory] = useState<{ id: string; request: number }>();
+  const [activeNewsId, setActiveNewsId] = useState<string | null>(null);
   const [selectedPlaceholder, setSelectedPlaceholder] = useState(0);
   const assets = market?.assets;
   const selectedAsset = assets?.find((asset) => asset.id === selectedAssetId)
@@ -36,6 +38,12 @@ export default function App() {
     return session.trade(assetId, side, quantity);
   }
 
+  function openNews(id: string) {
+    if (!market?.news?.some((item) => item.id === id)) return;
+    setActiveNewsId(id);
+    setOpenStory((previous) => ({ id, request: (previous?.request ?? 0) + 1 }));
+  }
+
   return (
     <div className="exchange-app" data-connection={status}>
       <a className="skip-link" href="#market">Skip to the market</a>
@@ -52,8 +60,8 @@ export default function App() {
         {directorEnabled && <DemoControls key={selectedAsset?.id} asset={selectedAsset} connected={status === 'live'} />}
         <div className="terminal-layout">
           <MarketList assets={assets} selectedAssetId={selectedAsset?.id} selectedPlaceholder={selectedPlaceholder} onSelect={selectAsset} onSelectPlaceholder={setSelectedPlaceholder} />
-          <NewsFeed items={market?.news} assets={assets} status={status} error={market?.newsError} onRetry={retry} onSelectAsset={selectAsset} />
-          <StarDetails asset={selectedAsset}>
+          <NewsFeed items={market?.news} assets={assets} status={status} error={market?.newsError} onRetry={retry} onSelectAsset={selectAsset} openStory={openStory} onExpandedNewsChange={setActiveNewsId} />
+          <StarDetails asset={selectedAsset} news={market?.news} currentTick={market?.tick} activeNewsId={activeNewsId ?? undefined} onSelectNews={openNews}>
             <TradeTicket key={selectedAsset?.id ?? 'empty'} asset={selectedAsset} portfolio={session.portfolio} hasSession={session.hasSession} busy={session.busy === 'trade'} disabled={status !== 'live' || session.stale || session.busy !== null} onTrade={placeOrder} feedback={orderAssetId === selectedAsset?.id ? session.error ?? session.notice : null} feedbackError={Boolean(session.error)} />
           </StarDetails>
         </div>

@@ -1,26 +1,34 @@
-import { useId } from 'react';
-import type { Candle } from '../market/types';
+import { useEffect, useId, useRef, useState } from 'react';
+import type { Candle, NewsHeadline } from '../market/types';
+import { groupChartNews, visibleCandles } from '../market/chartNews';
 import './CandleChart.css';
 
 interface CandleChartProps {
   candles?: Candle[];
   bucketTicks?: number;
+  news?: NewsHeadline[];
+  currentTick?: number;
+  activeNewsId?: string;
+  onSelectNews?: (newsId: string) => void;
 }
 
 const PLOT = { left: 12, right: 690, top: 24, bottom: 258 };
 const PRICE_FORMAT = new Intl.NumberFormat('en-GB', { maximumFractionDigits: 6 });
 
-function validCandle(candle: Candle): boolean {
-  return [candle.time, candle.open, candle.high, candle.low, candle.close].every(Number.isFinite)
-    && Number.isSafeInteger(candle.time) && candle.time >= 0
-    && Math.min(candle.open, candle.high, candle.low, candle.close) >= 0
-    && candle.high >= Math.max(candle.open, candle.close)
-    && candle.low <= Math.min(candle.open, candle.close);
+function tickRange(first: number, last: number): string {
+  return first === last ? `tick ${first}` : `ticks ${first}–${last}`;
 }
 
-export default function CandleChart({ candles = [], bucketTicks = 10 }: CandleChartProps) {
+export default function CandleChart({
+  candles = [], bucketTicks = 10, news = [], currentTick, activeNewsId, onSelectNews,
+}: CandleChartProps) {
   const titleId = useId();
-  const points = candles.filter(validCandle).sort((a, b) => a.time - b.time).slice(-60);
+  const newsListId = `${titleId}-news-list`;
+  const plotRef = useRef<HTMLDivElement>(null);
+  const markerButtons = useRef(new Map<string, HTMLButtonElement>());
+  const [plotWidth, setPlotWidth] = useState(0);
+  const [expandedStoryId, setExpandedStoryId] = useState<string | null>(null);
+  const points = visibleCandles(candles);
   const latest = points.at(-1);
   const empty = points.length === 0;
   const low = empty ? 0 : Math.min(...points.map((candle) => candle.low));
@@ -38,6 +46,23 @@ export default function CandleChart({ candles = [], bucketTicks = 10 }: CandleCh
   const step = (PLOT.right - PLOT.left) * bucketTicks / tickSpan;
   const candleWidth = Math.min(step * 0.52, 14);
   const xFor = (candle: Candle) => xAtTick(candle.time + bucketTicks / 2);
+  const markers = groupChartNews(points, news, {
+    bucketTicks,
+    currentTick,
+    minimumTickGap: plotWidth > 0 ? 28 / plotWidth * 800 / (PLOT.right - PLOT.left) * tickSpan : 0,
+  });
+  const newsCount = markers.reduce((total, marker) => total + marker.items.length, 0);
+  const expandedMarker = markers.find((marker) => marker.items.some((item) => item.id === expandedStoryId));
+
+  useEffect(() => {
+    const plot = plotRef.current;
+    if (!plot) return;
+    const measure = () => setPlotWidth(Math.max(0, plot.getBoundingClientRect().width - 24));
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(plot);
+    return () => observer.disconnect();
+  }, []);
 
   return (
     <section className="chart-panel" aria-labelledby={titleId}>
@@ -58,7 +83,7 @@ export default function CandleChart({ candles = [], bucketTicks = 10 }: CandleCh
         ))}
       </dl>
 
-      <div className="chart-plot">
+      <div className="chart-plot" ref={plotRef}>
         <svg
           className="chart-svg"
           viewBox="0 0 800 300"
@@ -103,6 +128,11 @@ export default function CandleChart({ candles = [], bucketTicks = 10 }: CandleCh
                   );
                 })}
               </g>
+              <g className="chart-news-guides" aria-hidden="true">
+                {markers.map((marker) => (
+                  <line key={marker.id} data-kind={marker.kind} x1={xAtTick(marker.tick)} x2={xAtTick(marker.tick)} y1="28" y2={PLOT.bottom} />
+                ))}
+              </g>
             </>
           )}
 
@@ -113,6 +143,51 @@ export default function CandleChart({ candles = [], bucketTicks = 10 }: CandleCh
             </g>
           )}
         </svg>
+
+        {markers.length > 0 && (
+          <div className="chart-news-markers" role="group" aria-label="News on the price chart">
+            {markers.map((marker) => {
+              const selected = marker.items.some((item) => item.id === activeNewsId);
+              const multiple = marker.items.length > 1;
+              const expanded = expandedMarker?.id === marker.id;
+              const label = multiple
+                ? `${marker.items.length} news stories at ${tickRange(marker.tick, marker.endTick)}. Show headlines`
+                : `${marker.items[0].headline}. Tick ${marker.tick}. Open news story`;
+              return (
+                <button
+                  key={marker.id}
+                  ref={(button) => {
+                    if (button) markerButtons.current.set(marker.id, button);
+                    else markerButtons.current.delete(marker.id);
+                  }}
+                  type="button"
+                  className={`chart-news-marker${selected ? ' chart-news-marker-active' : ''}`}
+                  style={{ left: `${xAtTick(marker.tick) / 8}%` }}
+                  data-kind={marker.kind}
+                  aria-label={label}
+                  title={label}
+                  aria-pressed={selected}
+                  aria-expanded={multiple ? expanded : undefined}
+                  aria-controls={multiple ? newsListId : undefined}
+                  onClick={() => {
+                    if (multiple || !onSelectNews) setExpandedStoryId(expanded ? null : marker.items[0].id);
+                    else {
+                      setExpandedStoryId(null);
+                      onSelectNews(marker.items[0].id);
+                    }
+                  }}
+                >
+                  {multiple ? marker.items.length : (
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                      <rect x="1.5" y="2" width="9" height="8" rx="1" stroke="currentColor" />
+                      <path d="M3.5 4.5h5m-5 3h5" stroke="currentColor" />
+                    </svg>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         {empty && (
           <div className="chart-empty">
@@ -131,6 +206,34 @@ export default function CandleChart({ candles = [], bucketTicks = 10 }: CandleCh
         <span><i className="chart-legend-down" /> Falling</span>
         <span className="chart-footer-label">Simulation ticks</span>
       </div>
+      {newsCount > 0 && (
+        <div className="chart-news-caption">
+          <span><i aria-hidden="true" /> {newsCount} news {newsCount === 1 ? 'story' : 'stories'}</span>
+          <span>Select a marker to open news</span>
+        </div>
+      )}
+      {expandedMarker && (
+        <div className="chart-news-list" id={newsListId} role="region" aria-label={`News at ${tickRange(expandedMarker.tick, expandedMarker.endTick)}`}>
+          <div className="chart-news-list-heading">
+            <span>{expandedMarker.items.length} {expandedMarker.items.length === 1 ? 'headline' : 'headlines'} · {tickRange(expandedMarker.tick, expandedMarker.endTick)}</span>
+            <button type="button" onClick={() => {
+              setExpandedStoryId(null);
+              markerButtons.current.get(expandedMarker.id)?.focus();
+            }} aria-label="Close chart headlines">×</button>
+          </div>
+          <ul>
+            {expandedMarker.items.map((item) => (
+              <li key={item.id}>
+                <button type="button" data-kind={item.kind} aria-pressed={item.id === activeNewsId} onClick={() => onSelectNews?.(item.id)}>
+                  <span className="chart-news-story-tick">Tick {item.tick}</span>
+                  <span>{item.headline}</span>
+                  <span aria-hidden="true">↗</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </section>
   );
 }

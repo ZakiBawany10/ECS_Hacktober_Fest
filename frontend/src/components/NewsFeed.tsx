@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import type { MarketConnectionStatus, NewsHeadline, StarAsset } from '../market/types';
 import Icon from './Icon';
 import './NewsFeed.css';
@@ -10,6 +10,8 @@ interface NewsFeedProps {
   error?: string | null;
   onRetry?: () => void;
   onSelectAsset: (assetId: string) => void;
+  openStory?: { id: string; request: number };
+  onExpandedNewsChange?: (newsId: string | null) => void;
 }
 
 const kindLabels: Record<NewsHeadline['kind'], string> = {
@@ -26,9 +28,14 @@ export default function NewsFeed({
   error,
   onRetry,
   onSelectAsset,
+  openStory,
+  onExpandedNewsChange,
 }: NewsFeedProps) {
   const [filter, setFilter] = useState<'all' | 'events' | 'rumours'>('all');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [focusRequest, setFocusRequest] = useState<{ id: string; request: number } | null>(null);
+  const processedRequest = useRef<number | null>(null);
+  const storyElements = useRef(new Map<string, HTMLElement>());
   const bodyIdPrefix = useId();
   const assetById = new Map(assets.map((asset) => [asset.id, asset]));
   // The feed reducer preserves newest-tick order, including ties within a tick.
@@ -43,6 +50,38 @@ export default function NewsFeed({
       setExpandedId(null);
     }
   }, [expandedId, items]);
+
+  useEffect(() => {
+    if (!openStory || processedRequest.current === openStory.request) return;
+    // Consume each click once, so later feed updates cannot reopen a closed story.
+    processedRequest.current = openStory.request;
+    if (!items?.some((item) => item.id === openStory.id)) return;
+    setFilter('all');
+    setExpandedId(openStory.id);
+    setFocusRequest(openStory);
+  }, [openStory, items]);
+
+  useEffect(() => {
+    onExpandedNewsChange?.(expandedId);
+  }, [expandedId, onExpandedNewsChange]);
+
+  useEffect(() => {
+    if (!focusRequest) return;
+    if (expandedId !== focusRequest.id || filter !== 'all') {
+      setFocusRequest(null);
+      return;
+    }
+    const frame = requestAnimationFrame(() => {
+      const article = storyElements.current.get(focusRequest.id);
+      if (article) {
+        const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        article.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'nearest' });
+        (article.querySelector<HTMLButtonElement>('.news-headline-button') ?? article).focus({ preventScroll: true });
+      }
+      setFocusRequest((current) => current?.request === focusRequest.request ? null : current);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [focusRequest, expandedId, filter]);
 
   const hasNews = (items?.length ?? 0) > 0;
   const statusCaption = status === 'live'
@@ -90,7 +129,17 @@ export default function NewsFeed({
           const bodyId = `${bodyIdPrefix}-news-${encodeURIComponent(item.id)}`;
 
           return (
-            <article className={`news-item${index === 0 ? ' news-featured' : ''}`} key={item.id} data-kind={item.kind}>
+            <article
+              className={`news-item${index === 0 ? ' news-featured' : ''}${expanded ? ' news-selected' : ''}`}
+              key={item.id}
+              data-kind={item.kind}
+              data-news-id={item.id}
+              tabIndex={hasBody ? undefined : -1}
+              ref={(element) => {
+                if (element) storyElements.current.set(item.id, element);
+                else storyElements.current.delete(item.id);
+              }}
+            >
               <div className="news-meta">
                 <span className="news-category">
                   <Icon name={item.kind === 'rumour' ? 'signal' : 'news'} size={12} />

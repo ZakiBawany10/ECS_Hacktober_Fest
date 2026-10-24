@@ -5,6 +5,10 @@
 }
 
 .news-panel .news-stream:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.news-panel .news-item { scroll-margin-block: 12px; }
+.news-panel .news-selected { background: #1c291f; box-shadow: inset 3px 0 var(--accent); }
+.news-panel .news-item:focus-visible,
+.news-panel .news-headline-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 5px; }
 
 .news-panel .news-feed-error {
   display: flex;
