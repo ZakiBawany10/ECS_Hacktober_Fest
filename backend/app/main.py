@@ -5,6 +5,8 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 
 from . import config
+from .ai.client import GemmaClient
+from .ai.worker import AIWorker
 from .market import Market, MarketError, NotFoundError, Player, Star
 from .models import (
     Asset,
@@ -24,6 +26,9 @@ from .models import (
 # Route handlers are async so they run on the same event loop as the tick loop,
 # which keeps all access to the market single-threaded.
 market = Market()
+# Gemma calls run in the worker's own task, never on the tick loop.
+gemma = GemmaClient()
+worker = AIWorker(gemma)
 
 
 class ConnectionManager:
@@ -84,11 +89,14 @@ async def tick_loop() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    task = asyncio.create_task(tick_loop())
+    tasks = [asyncio.create_task(tick_loop()), asyncio.create_task(worker.run())]
     yield
-    task.cancel()
-    with suppress(asyncio.CancelledError):
-        await task
+    for task in tasks:
+        task.cancel()
+    for task in tasks:
+        with suppress(asyncio.CancelledError):
+            await task
+    await gemma.aclose()
 
 
 app = FastAPI(title="Star Market", lifespan=lifespan)

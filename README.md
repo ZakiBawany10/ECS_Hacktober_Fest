@@ -37,3 +37,7 @@ On macOS/Linux, use `.venv/bin/python` instead.
 Health endpoint: `http://localhost:8000/health`.
 API documentation: `http://localhost:8000/docs`.
 Tests: `cd backend`, then `..\.venv\Scripts\python -m pytest`.
+
+News headlines come from Gemma running locally in [Ollama](https://ollama.com):
+`ollama pull gemma4:e4b-it-q4_K_M`. Without it, the backend still runs and uses
+template headlines. Details are in `backend/README.md`.

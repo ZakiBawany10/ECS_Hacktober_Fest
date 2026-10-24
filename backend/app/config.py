@@ -22,3 +22,10 @@ LEADERBOARD_EVERY_TICKS = 5
 IMPACT_PER_10K = 0.01
 IMPACT_CAP = 0.15  # the multiplier stays within 1 ± this
 IMPACT_DECAY = 0.1  # fraction of the gap to 1 closed each tick
+
+# Gemma runs locally through Ollama; see app/ai/. It only writes text: server code owns prices.
+GEMMA_BASE_URL = os.getenv("GEMMA_BASE_URL", "http://localhost:11434")
+GEMMA_MODEL = os.getenv("GEMMA_MODEL", "gemma4:e4b-it-q4_K_M")
+GEMMA_TIMEOUT_SECONDS = 10.0  # per HTTP attempt
+GEMMA_KEEP_ALIVE = "30m"  # keeps the model loaded between calls; reloading it takes about 5 s
+HEADLINE_DEADLINE_SECONDS = 5.0  # a headline Gemma hasn't written by then falls back to a template

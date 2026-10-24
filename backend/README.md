@@ -27,7 +27,33 @@ Check [health](http://127.0.0.1:8000/health) or open the
 | `app/pricing.py` | Price formula, trading pressure and per-tick luminosity noise |
 | `app/lifecycle.py` | Luminosity bounds, stage durations and lifecycle paths |
 | `app/seed.py` | Starting stars (one main-sequence star per spectral type) |
-| `app/config.py` | Game constants; `TICK_SECONDS` env var (default 1.0) |
+| `app/config.py` | Game constants and env vars |
+| `app/ai/client.py` | Calls Gemma through Ollama's chat API with a JSON schema |
+| `app/ai/prompts.py` | Prompts, reply schemas and template fallbacks |
+| `app/ai/worker.py` | Background task that runs Gemma calls away from the tick loop |
+
+## Gemma
+
+Gemma writes the news text. It never sets prices or balances. It runs locally
+through Ollama:
+
+```sh
+ollama pull gemma4:e4b-it-q4_K_M
+ollama serve   # if the Ollama app isn't already running
+```
+
+| Env var | Default |
+|---|---|
+| `TICK_SECONDS` | `1.0` |
+| `GEMMA_BASE_URL` | `http://localhost:11434` |
+| `GEMMA_MODEL` | `gemma4:e4b-it-q4_K_M` |
+
+Calls run in their own asyncio task, so a slow model never holds up the tick
+loop. They use structured JSON output with thinking off: on an M5 with 16 GB a
+headline takes about 1.5 s, and the first call after loading takes about 5 s, so
+the worker warms the model up at startup. Each call is retried once. A headline
+Gemma hasn't written within 5 s falls back to a template, so the game works
+without Ollama. Tests use a fake client and don't need Ollama.
 
 Pricing follows `docs/main_sequence_pricing_data.md`:
 `price = 100 × (log10(L/L☉) + 5)`, with 1000 shares per star.
