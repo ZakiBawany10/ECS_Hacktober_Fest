@@ -47,20 +47,21 @@ type's main-sequence range (Table 1 of the pricing doc), and again whenever it
 enters a new stage. After a stage change, L eases towards the new value through
 the twinkle's mean reversion; a supernova jumps straight to its value. A black
 hole has no light: its L and price sit at 0 and don't move. The spectral type
-decides the path (section 2 of the pricing doc); mass is display only:
+decides the path (sections 2 and 4 of the pricing doc); mass is display only:
 
 ```text
 O        main_sequence → blue_hypergiant → supernova → black_hole
-B        main_sequence → red_hypergiant → supernova → neutron_star
-A, F     main_sequence → blue_giant → planetary_nebula → white_dwarf
-G, K, M  main_sequence → red_giant → planetary_nebula → white_dwarf
+B        main_sequence → red_hypergiant → supernova → black_hole
+A, F     main_sequence → blue_giant → supernova → neutron_star
+G, K, M  main_sequence → red_giant → white_dwarf
 ```
 
 Giant and hypergiant bounds come from Table 4 of the pricing doc, except that a
 hypergiant's lower bound is never below the top of its main-sequence range, so
-becoming one is always a rally. **The bounds
-for supernova, planetary nebula, white dwarf and neutron star are placeholders**
-(`STAGE_L_BOUNDS` in `app/lifecycle.py`) until the real values are ready. Stage
+becoming one is always a rally. White dwarf and neutron star bounds come from
+Table 5 (prices 0 to 700 and 0 to 600). **The supernova bounds are a
+placeholder** (`STAGE_L_BOUNDS` in `app/lifecycle.py`) until section 4's
+supernova price path (×3 spike, slow fall, sharp drop) is built. Stage
 durations are compressed for the demo. `spectral_type`, `mass` and `temperature`
 are birth values and don't change as a star evolves.
 
@@ -82,8 +83,8 @@ the browser.
 Asset     { id, name, kind: "star", stage, spectral_type, mass, temperature, L,
             price, shares_total, shares_available }
 stage     "main_sequence" | "red_giant" | "blue_giant" | "red_hypergiant"
-          | "blue_hypergiant" | "supernova" | "planetary_nebula" | "white_dwarf"
-          | "neutron_star" | "black_hole"
+          | "blue_hypergiant" | "supernova" | "white_dwarf" | "neutron_star"
+          | "black_hole"
 Portfolio { player_id, nickname, cash, holdings: {asset_id: qty}, net_worth }
 ```
 

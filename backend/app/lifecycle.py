@@ -13,7 +13,6 @@ Stage = Literal[
     "red_hypergiant",
     "blue_hypergiant",
     "supernova",
-    "planetary_nebula",
     "white_dwarf",
     "neutron_star",
     "black_hole",
@@ -46,23 +45,23 @@ STAGE_L_BOUNDS: dict[Stage, tuple[float, float]] = {
     # Table 4's red hypergiant floor (1e5) is already above B's top (4.5e4); blue starts at O's top.
     "red_hypergiant": _from_shifted_log(10.00, 10.70),
     "blue_hypergiant": (MAIN_SEQUENCE_L_BOUNDS["O"][1], _from_shifted_log(10.30, 11.48)[1]),
-    # PLACEHOLDER: replace with Rupert's values.
+    # PLACEHOLDER until the section 4 supernova price path is built.
     "supernova": (1e9, 1e10),
-    "planetary_nebula": (1e3, 1e4),
-    "white_dwarf": (1e-3, 1e-2),
-    "neutron_star": (1e-4, 1e-3),
+    # Table 5 of docs/main_sequence_pricing_data.md.
+    "white_dwarf": _from_shifted_log(0.00, 7.00),
+    "neutron_star": _from_shifted_log(0.00, 6.00),
 }
 
-# The stages each spectral type passes through, from section 2 of docs/main_sequence_pricing_data.md.
-_ENDS_AS_WHITE_DWARF: list[Stage] = ["planetary_nebula", "white_dwarf"]
+# The stages each spectral type passes through, from sections 2 and 4 of
+# docs/main_sequence_pricing_data.md. G, K and M skip the supernova and go straight to their remnant.
 LIFECYCLE_PATHS: dict[str, list[Stage]] = {
     "O": ["main_sequence", "blue_hypergiant", "supernova", "black_hole"],
-    "B": ["main_sequence", "red_hypergiant", "supernova", "neutron_star"],
-    "A": ["main_sequence", "blue_giant", *_ENDS_AS_WHITE_DWARF],
-    "F": ["main_sequence", "blue_giant", *_ENDS_AS_WHITE_DWARF],
-    "G": ["main_sequence", "red_giant", *_ENDS_AS_WHITE_DWARF],
-    "K": ["main_sequence", "red_giant", *_ENDS_AS_WHITE_DWARF],
-    "M": ["main_sequence", "red_giant", *_ENDS_AS_WHITE_DWARF],
+    "B": ["main_sequence", "red_hypergiant", "supernova", "black_hole"],
+    "A": ["main_sequence", "blue_giant", "supernova", "neutron_star"],
+    "F": ["main_sequence", "blue_giant", "supernova", "neutron_star"],
+    "G": ["main_sequence", "red_giant", "white_dwarf"],
+    "K": ["main_sequence", "red_giant", "white_dwarf"],
+    "M": ["main_sequence", "red_giant", "white_dwarf"],
 }
 
 # Stage durations in real seconds, compressed for a ~20 minute session. Hotter types burn out sooner.
@@ -82,7 +81,6 @@ STAGE_SECONDS: dict[Stage, tuple[float, float] | None] = {
     "red_hypergiant": (60, 120),
     "blue_hypergiant": (60, 120),
     "supernova": (10, 15),
-    "planetary_nebula": (45, 60),
     "white_dwarf": None,
     "neutron_star": None,
     "black_hole": None,
