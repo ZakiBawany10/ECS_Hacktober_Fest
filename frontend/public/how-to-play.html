@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>How to play · Star Market</title>
+  <style>
+    :root { color-scheme: dark; font-family: 'Segoe UI', sans-serif; color: #edf0e8; background: #0b100e; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    main { max-width: 1120px; margin: auto; padding: 28px 24px 48px; }
+    nav { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding-bottom: 24px; border-bottom: 1px solid #29312c; }
+    a { color: #c1f6b5; text-underline-offset: 4px; }
+    a:focus-visible { outline: 2px solid #c1f6b5; outline-offset: 5px; }
+    .brand { font-size: 19px; font-weight: 600; text-decoration: none; }
+    h1 { margin: 36px 0 12px; font-size: clamp(30px, 5vw, 46px); font-weight: 500; letter-spacing: -1.5px; }
+    h2 { margin: 0 0 12px; font-size: 20px; font-weight: 500; }
+    p, li { color: #afbbb1; font-size: 15px; line-height: 1.7; }
+    p { margin: 0 0 14px; }
+    strong { color: #edf0e8; font-weight: 600; }
+    .intro { max-width: 720px; margin-bottom: 28px; }
+    .steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+    article { padding: 22px; border: 1px solid #29312c; border-radius: 10px; background: #121815; }
+    article p:last-child { margin-bottom: 0; }
+    .number { display: block; margin-bottom: 12px; color: #c1f6b5; font-size: 12px; }
+    .lifecycle, .events { margin-top: 36px; }
+    .event-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 24px; margin: 20px 0; }
+    .event-list > div { padding: 15px 0; border-top: 1px solid #29312c; }
+    .event-list dt { margin-bottom: 6px; color: #edf0e8; font-size: 16px; font-weight: 600; }
+    .event-list dd { margin: 0; color: #afbbb1; font-size: 14px; line-height: 1.7; }
+    .coming-later { color: #929e95; font-size: 14px; line-height: 1.7; }
+    figure { margin: 20px 0; }
+    img { display: block; width: 100%; height: auto; border: 1px solid #29312c; border-radius: 10px; }
+    figcaption { margin-top: 12px; color: #929e95; font-size: 13px; line-height: 1.6; }
+    .tip { margin-top: 24px; padding: 20px 22px; border-left: 3px solid #c1f6b5; background: #121815; }
+    .tip p { margin: 0; }
+    footer { margin-top: 32px; padding-top: 20px; border-top: 1px solid #29312c; color: #929e95; font-size: 13px; }
+    @media (max-width: 720px) { .steps, .event-list { grid-template-columns: 1fr; } main { padding-inline: 18px; } }
+  </style>
+</head>
+<body>
+  <main>
+    <nav aria-label="Page navigation"><a class="brand" href="/">starmarket.</a><a href="/">Open game →</a></nav>
+    <h1>How to play</h1>
+    <p class="intro">Buy and sell shares in stars. Read the news, watch stars evolve, and grow your <strong>net worth</strong>: your cash plus the current value of your shares.</p>
+    <section class="steps" aria-label="Getting started">
+      <article>
+        <span class="number">01 / GET STARTED</span>
+        <h2>Enter the market</h2>
+        <p>Enter your name and choose <strong>Start simulation</strong>. You begin with <strong>10,000 CR</strong>. Returning players can choose <strong>Resume simulation</strong>.</p>
+        <p>The first player starts the shared universe. Once running, it keeps moving for everyone.</p>
+      </article>
+      <article>
+        <span class="number">02 / FIND YOUR STAR</span>
+        <h2>Watch the signals</h2>
+        <p><strong>Left:</strong> live prices and rankings. Select a star to inspect it.</p>
+        <p><strong>Middle:</strong> news about events and stellar changes.</p>
+        <p><strong>Right:</strong> the selected star’s candle chart, details and order controls. Chart markers open related news.</p>
+      </article>
+      <article>
+        <span class="number">03 / MAKE YOUR MOVE</span>
+        <h2>Buy and sell</h2>
+        <p>Choose <strong>Buy</strong>, then use a quantity shortcut or type an amount. Choose <strong>Sell</strong> and use the slider to sell shares you own. Manual entry supports fractional shares.</p>
+        <p>Check the estimate, then confirm your order. Your order affects the execution price, so the final cost can differ from the quote.</p>
+      </article>
+    </section>
+    <section class="lifecycle" aria-labelledby="lifecycle-title">
+      <h2 id="lifecycle-title">Know the stellar lifecycle</h2>
+      <p>Stars follow different paths as they age. Their brightness, events and trading activity affect their prices. A giant or supernova can bring a dramatic change; a black hole has <strong>zero value and cannot be traded</strong>.</p>
+      <figure>
+        <img src="stellar-life-cycles-starmarket.png" width="3200" height="2400" alt="Star Market lifecycle diagram: protostars develop into different star types. Smaller stars become red giants and white dwarfs; larger stars can become giants or hypergiants and end as neutron stars or black holes, with supernovae along some paths.">
+        <figcaption>Follow the paths in the game’s lifecycle diagram. <a href="stellar-life-cycles-starmarket.png" target="_blank" rel="noreferrer">Open the full-size diagram</a> to read every stage.</figcaption>
+      </figure>
+    </section>
+    <section class="events" aria-labelledby="events-title">
+      <h2 id="events-title">Events to watch</h2>
+      <p>Events can change a star’s price or its future. Read the updates: the first headline does not always reveal how the story ends.</p>
+      <dl class="event-list">
+        <div><dt>Dyson sphere</dt><dd>Alien construction blocks a star’s light, pushing its price down. Completion leaves it dim; abandonment can bring a sharp rebound. A construction pause does not guarantee abandonment.</dd></div>
+        <div><dt>Star merger</dt><dd>Two stars spiral together and may combine into a bigger, brighter star. Expect volatility as they approach; a near miss is also possible.</dd></div>
+        <div><dt>Intelligent life</dt><dd>A growing civilisation adds value to its star. Progress can stall, and extinction or a powerful flare can wipe out that extra value.</dd></div>
+        <div><dt>Mysterious dimming</dt><dd>Repeated dips may be passing dust or the start of a Dyson sphere. Dust clears; deeper, more regular dips can hint at something being built.</dd></div>
+        <div><dt>Mass transfer</dt><dd>One star loses gas to another. The donor tends to lose value while the receiver grows; the added mass can also change its lifecycle.</dd></div>
+        <div><dt>Meteor strike</dt><dd>A temporary dip in brightness pushes the price down, followed by a gradual recovery.</dd></div>
+        <div><dt>Stellar flare</dt><dd>A burst of brightness briefly lifts the price before fading. Flares can also wipe out young civilisations around small red stars.</dd></div>
+        <div><dt>Coronal collapse</dt><dd>An ageing giant reaches its next lifecycle stage sooner. Watch what that star is about to become.</dd></div>
+        <div><dt>Alien signal</dt><dd>A possible discovery stirs speculation. Signals may be confirmed or debunked, so a rumour is not a guaranteed gain.</dd></div>
+      </dl>
+      <p><strong>Compare the news sources.</strong> Some exaggerate, some report cautiously, and some report late. Look for follow-up stories before treating speculation as fact.</p>
+      <details class="coming-later">
+        <summary>Coming later: more events from the game design</summary>
+        <dl class="event-list">
+          <div><dt>Remnant supernova</dt><dd>A feeding white dwarf builds towards a violent price spike. It may stall, explode completely or leave a weakened “zombie” survivor.</dd></div>
+          <div><dt>Black hole feeding</dt><dd>A nearby star is stripped of material and may be destroyed or escape. The planned mechanic lets the black hole gain value; current black holes remain worth zero and cannot be traded.</dd></div>
+          <div><dt>Gamma-ray burst</dt><dd>A massive explosion sends a destructive beam through nearby systems, wiping out civilisations and triggering a wider market shock.</dd></div>
+          <div><dt>Magnetar starquake</dt><dd>A highly magnetic neutron star releases a sudden flare. The price spikes, then settles; early X-ray reports may offer a warning.</dd></div>
+          <div><dt>Nebula seeding</dt><dd>A nearby supernova changes the clues reported about a nebula, rather than directly changing its price.</dd></div>
+        </dl>
+      </details>
+    </section>
+    <aside class="tip"><p><strong>Keep an eye on your holdings.</strong> A rising price only becomes cash when you sell. News can explain what is happening, but it does not guarantee the next price move.</p></aside>
+    <footer>Ready? Return to your game tab, or <a href="/">open the menu</a>.</footer>
+  </main>
+</body>
+</html>

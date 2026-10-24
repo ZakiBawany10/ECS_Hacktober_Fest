@@ -78,6 +78,7 @@ export default function App() {
       <header className="app-header">
         <a className="brand" href="#market" aria-label="Star Market home"><span className="brand-mark"><Icon name="orbit" size={30} /></span><span>star<span className="brand-light">market</span><span className="brand-dot">.</span></span></a>
         <span className="header-divider" /><span className="header-caption">The stellar exchange</span>
+        <a className="market-help-link" href="/how-to-play.html" target="_blank" rel="noreferrer" aria-label="How to play (opens in a new tab)">Help ↗</a>
         <div className="header-status" role="status"><span className="status-dot" /><span>{status === 'live' ? 'Live market' : status === 'connecting' ? 'Connecting' : status === 'reconnecting' ? 'Reconnecting' : 'Offline'}</span></div>
       </header>
       <main className="workspace">

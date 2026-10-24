@@ -44,6 +44,7 @@
 .start-menu-form button:disabled { border-color: #47603f; color: #a0b499; background: #2a3c27; cursor: not-allowed; }
 .start-menu-error, .start-menu-notice { margin-top: 16px; font-size: 11px; line-height: 1.75; overflow-wrap: anywhere; }
 .start-menu-error { color: #efb0a0; }
+.start-menu-help { display: inline-block; margin-top: 20px; color: var(--accent); font-size: 12px; text-decoration: underline; text-underline-offset: 4px; }
 .start-menu-notice { color: var(--accent); }
 .start-menu-card-footer { display: flex; align-items: center; gap: 8px; margin-top: 29px; padding-top: 21px; border-top: 1px solid var(--line); color: #8c9c87; font-size: 9px; line-height: 1.6; }
 .start-menu-card-footer svg { color: #a5bd99; }

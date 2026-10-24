@@ -79,6 +79,7 @@ export default function StartMenu({ session, onStart, onResume }: StartMenuProps
             {(submissionError || session.error) && <p className="start-menu-error" role="alert">{submissionError || session.error}</p>}
             {session.notice && <p className="start-menu-notice" role="status">{session.notice}</p>}
           </form>
+          <a className="start-menu-help" href="/how-to-play.html" target="_blank" rel="noreferrer" aria-label="How to play (opens in a new tab)">How to play ↗</a>
           <p className="start-menu-card-footer"><Icon name="signal" size={14} /> A shared universe. Every decision counts.</p>
         </section>
       </main>
