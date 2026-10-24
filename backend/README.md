@@ -152,6 +152,7 @@ by weight among those with an eligible star:
 | `mysterious_dimming` | 10 | main-sequence stars, one at a time | 3–5 dips of −6% to −14% over 60–120 s |
 | `dyson_sphere` | 4 | main-sequence stars and giants, two building at a time | slides towards ~3% of the price over 300 s |
 | `intelligent_life` | 8 | G, K and M main-sequence stars settled for 60 s, three at a time | ×1.05, then ×1.20, then ×1.45 |
+| `alien_signal` | 8 | any star, one signal per star | none, or ±5–10% if true; a rumour |
 
 Dimming and Dyson spheres are **major** events: at most 4 run at once, and a
 star can only have one. Each rolls a hidden outcome when it starts, which never
@@ -168,6 +169,11 @@ leaves the server:
   on an M star with level 1–2 life sterilises it 30% of the time. When its star
   becomes a giant, life migrates to another G, K or M star (50%) or dies out.
   Spacefaring civilisations make their star 5× likelier to get a Dyson sphere.
+- **Alien signal (5.10):** a rumour, published with `kind: "rumour"`. It's true
+  70% of the time, when it moves the price ±5–10%. A false one moves nothing,
+  so any price move comes from players trading on it. After 45–75 s a
+  `confirmed` or `debunked` item follows. Gemma is told the truth so it can
+  write a convincing story either way; it never reaches clients.
 - **Mysterious dimming (5.6):** 85% dust, which clears. 15% an early Dyson
   sphere: the dips get deeper and more regular, then a sphere starts.
 
@@ -213,7 +219,8 @@ NewsItem  { id, t, kind: "lifecycle" | "event" | "rumour" | "system", headline,
 `news` in `/state` holds the last 50 items, oldest first. `t` is the tick the
 news is about, which can be a tick or two before it was published. `lifecycle`
 items cover stage changes (including forced ones) and `event` items cover
-events; `rumour` and `system` aren't used yet.
+events; `rumour` items cover alien signals, which may be false. `system`
+isn't used yet.
 
 Each item is reported by one of five outlets, picked at random (section 5.0.5 of
 the pricing doc), and Gemma writes in its voice. `source` is the outlet's name:

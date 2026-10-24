@@ -123,7 +123,7 @@ def test_every_event_moment_has_a_note_and_fallback():
     assert set(MOMENTS) == set(EVENT_WEIGHTS)
     facts = {
         "name": "Kora", "stage": "red giant", "size": "heavy", "next_stage": "white dwarf",
-        "origin": "", "progress": "40%", "status": "", "hint": "", "life": "microbial life", "new_home": "Ember",
+        "origin": "", "progress": "40%", "status": "", "hint": "", "life": "microbial life", "new_home": "Ember", "flavour": "", "secret": "",
     }  # fmt: skip
     for event_type, moment in moments:
         assert "Kora" in event_fallback(event_type, moment, facts).body + event_fallback(event_type, moment, facts).headline

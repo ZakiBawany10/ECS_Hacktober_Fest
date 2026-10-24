@@ -17,6 +17,7 @@ from app.lifecycle import (
     seconds_to_ticks,
 )
 from app.events import MAJOR_TYPES, MOMENTS, eligible, star_weight
+from app.events.rumour import create_signal
 from app.market import Market, MarketError, NotFoundError
 from app.pricing import apply_impact, luminosity_from_price, market_price, price_from_luminosity, twinkle
 
@@ -706,3 +707,34 @@ def test_spacefaring_civilisations_draw_dyson_spheres():
     civ.level = 3
     assert star_weight("dyson_sphere", market.stars["kora"], market) == 5
     assert star_weight("dyson_sphere", market.stars["ember"], market) == 1
+
+
+def run_signal(is_true: bool):
+    """Start an alien signal with its truth fixed, run it to the end, and record what happened."""
+    market = make_market()
+    star = market.stars["fenwick"]
+    signal = create_signal("fenwick", market.tick, random.Random(0))
+    signal.is_true = is_true
+    market.add_event(signal)
+    [start] = market.take_event_news()
+    moments, multipliers = [], []
+    while signal.id in market.events:
+        moments += [(n.moment, n.kind, n.flash) for n in market.advance().event_news]
+        multipliers.append(star.event_multiplier)
+    return start, moments, multipliers, star
+
+
+def test_true_alien_signal_moves_the_price_then_is_confirmed():
+    start, moments, multipliers, star = run_signal(is_true=True)
+    assert (start.moment, start.kind) == ("start", "rumour")
+    assert "real" in start.facts["secret"]
+    assert max(abs(m - 1) for m in multipliers) > 0.04
+    assert moments == [("confirmed", "rumour", True)]
+    assert star.multipliers == {}
+
+
+def test_false_alien_signal_changes_nothing_and_is_debunked():
+    start, moments, multipliers, star = run_signal(is_true=False)
+    assert "a hoax" in start.facts["secret"]  # for Gemma only: facts never reach clients
+    assert moments == [("debunked", "rumour", True)]
+    assert set(multipliers) == {1.0}

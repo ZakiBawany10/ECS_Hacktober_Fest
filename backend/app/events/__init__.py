@@ -13,6 +13,7 @@ from .civ import civilisation_on, create_civilisation, life_eligible
 from .dimming import MAX_DIMMING, create_dimming, dimming_eligible
 from .dyson import create_dyson, dyson_eligible
 from .minor import create_minor, minor_eligible
+from .rumour import create_signal
 
 if TYPE_CHECKING:
     from ..market import Market, Star
@@ -42,6 +43,7 @@ EVENT_WEIGHTS: dict[EventType, float] = {
     "mysterious_dimming": 10,
     "dyson_sphere": 4,
     "intelligent_life": 8,
+    "alien_signal": 8,  # the doc gives no weight
 }
 DYSON_CIV_WEIGHT = 5  # a spacefaring civilisation's star is this much likelier to get a Dyson sphere
 
@@ -57,6 +59,7 @@ MOMENTS: dict[EventType, set[str]] = {
     "mysterious_dimming": {"start", "update", "cleared"},
     "dyson_sphere": {"start", "update", "stall", "abandoned", "complete", "destroyed"},
     "intelligent_life": {"start", "level_up", "silent", "sterilised", "migrated", "extinct"},
+    "alien_signal": {"start", "confirmed", "debunked"},
 }
 
 
@@ -75,6 +78,8 @@ def eligible(event_type: EventType, star: "Star", market: "Market", director: bo
         return dimming_eligible(star) and (director or market.event_count("mysterious_dimming") < MAX_DIMMING)
     if event_type == "intelligent_life":
         return life_eligible(star, market)
+    if event_type == "alien_signal":
+        return not any(e.type == "alien_signal" and e.asset_id == star.id for e in market.events.values())
     return minor_eligible(event_type, star)
 
 
@@ -94,4 +99,6 @@ def create_event(event_type: EventType, star: "Star", market: "Market") -> Event
         return create_dimming(star, market.tick, market.rng, early_dyson_possible=market.can_start_dyson())
     if event_type == "intelligent_life":
         return create_civilisation(star, market.tick)
+    if event_type == "alien_signal":
+        return create_signal(star.id, market.tick, market.rng)
     return create_minor(event_type, star, market.tick, market.rng)

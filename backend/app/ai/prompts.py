@@ -147,6 +147,18 @@ EVENT_NOTES: dict[tuple[EventType, str], str] = {
         "{name} has swollen into a {stage}, and {life} on its planets could not escape. It is extinct, "
         "and its price premium is gone."
     ),
+    ("alien_signal", "start"): (
+        "RUMOUR: an unexplained signal has been picked up from the direction of {name}, a {stage}. {flavour} "
+        "It is unconfirmed: report it as a rumour. {secret}"
+    ),
+    ("alien_signal", "confirmed"): (
+        "The signal from {name} has been confirmed as genuine. The price move it caused was real, and will "
+        "fade as the excitement settles."
+    ),
+    ("alien_signal", "debunked"): (
+        "The signal from {name} has been debunked: it was a hoax. Nothing about the star has changed, and "
+        "anyone who traded on the rumour was fooled."
+    ),
 }
 
 EVENT_FALLBACKS: dict[tuple[EventType, str], tuple[str, str]] = {
@@ -168,6 +180,9 @@ EVENT_FALLBACKS: dict[tuple[EventType, str], tuple[str, str]] = {
     ("intelligent_life", "sterilised"): ("Flare sterilises {name}", "A stellar flare has wiped out {life} around {name}."),
     ("intelligent_life", "migrated"): ("Life flees {name} for {new_home}", "As {name} swells, {life} has moved to {new_home}."),
     ("intelligent_life", "extinct"): ("Life dies out at {name}", "Nothing survived on {name}'s planets as it swelled."),
+    ("alien_signal", "start"): ("Mystery signal from {name}?", "An unconfirmed signal has been picked up from {name}. {flavour}"),
+    ("alien_signal", "confirmed"): ("{name} signal confirmed", "The signal from {name} is genuine."),
+    ("alien_signal", "debunked"): ("{name} signal was a hoax", "The signal from {name} has been debunked. Nothing has changed."),
 }
 
 _HEADLINE_REQUEST = "Write a headline of at most 12 words and a body of one or two sentences."

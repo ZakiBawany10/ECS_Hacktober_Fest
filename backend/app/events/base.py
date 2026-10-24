@@ -18,6 +18,7 @@ EventType = Literal[
     "mysterious_dimming",
     "dyson_sphere",
     "intelligent_life",
+    "alien_signal",
 ]
 
 # A multiplier this close to its target has finished easing.
@@ -63,6 +64,7 @@ class Event:
 
     # A major event blocks other major events on its star, and counts towards MAX_MAJOR_EVENTS.
     major: ClassVar[bool] = False
+    news_kind: ClassVar[NewsKind] = "event"
 
     @property
     def counts_towards_cap(self) -> bool:
@@ -92,7 +94,8 @@ class Event:
         star = self.star(market)
         facts = {"name": star.name, "stage": STAGE_LABELS[star.stage], **facts}
         asset_ids = [star.id, *(also or [])]
-        market.event_news.append(EventNews(self.type, moment, asset_ids, facts, market.tick, flash, outlet))
+        news = EventNews(self.type, moment, asset_ids, facts, market.tick, flash, outlet, self.news_kind)
+        market.event_news.append(news)
 
 
 @dataclass
