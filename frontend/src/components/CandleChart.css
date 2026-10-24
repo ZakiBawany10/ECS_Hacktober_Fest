@@ -1,0 +1,202 @@
+.chart-panel {
+  --chart-surface: #171d1e;
+  --chart-text: #e7ece9;
+  --chart-muted: #84928c;
+  --chart-border: #2b3531;
+  --chart-mint: #b6f5bc;
+  --chart-down: #e68f86;
+  min-width: 0;
+  color: var(--chart-text);
+  background: var(--chart-surface);
+  border: 1px solid var(--chart-border);
+}
+
+.chart-panel .chart-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 19px 18px 16px;
+}
+
+.chart-panel .chart-overline {
+  margin: 0 0 7px;
+  color: var(--chart-muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.13em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.chart-panel .chart-heading h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.35;
+}
+
+.chart-panel .chart-mode {
+  padding: 6px 8px;
+  border: 1px solid var(--chart-border);
+  border-radius: 4px;
+  font-size: 9px;
+  letter-spacing: .08em;
+  color: var(--chart-muted);
+}
+
+.chart-panel .chart-ohlc {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 13px 18px;
+  border-top: 1px solid var(--chart-border);
+  border-bottom: 1px solid var(--chart-border);
+}
+
+.chart-panel .chart-ohlc > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 5px;
+  min-width: 0;
+}
+
+.chart-panel .chart-ohlc dt {
+  color: var(--chart-muted);
+  font-size: 10px;
+}
+
+.chart-panel .chart-ohlc dd {
+  overflow: hidden;
+  margin: 0;
+  color: #c4cec8;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+}
+
+.chart-panel .chart-plot {
+  position: relative;
+  min-height: 264px;
+  padding: 0 12px;
+}
+
+.chart-panel .chart-svg {
+  display: block;
+  width: 100%;
+  height: 280px;
+  overflow: visible;
+}
+
+.chart-panel .chart-grid line {
+  stroke: #2a3430;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.chart-panel .chart-axis-labels {
+  fill: #75847c;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-panel .chart-candle line {
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.chart-panel .chart-candle-up {
+  fill: var(--chart-mint);
+  stroke: var(--chart-mint);
+}
+
+.chart-panel .chart-candle-down {
+  fill: var(--chart-down);
+  stroke: var(--chart-down);
+}
+
+.chart-panel .chart-empty {
+  position: absolute;
+  inset: 0 14% 0 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: #728579;
+  pointer-events: none;
+}
+
+.chart-panel .chart-empty > svg {
+  color: #a3b8a6;
+  padding: 10px;
+  box-sizing: content-box;
+  background: var(--chart-surface);
+  border: 1px solid var(--chart-border);
+}
+
+.chart-panel .chart-empty > span {
+  padding: 4px 7px;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 11px;
+  background: var(--chart-surface);
+}
+
+.chart-panel .chart-footer {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-height: 39px;
+  padding: 0 18px;
+  color: var(--chart-muted);
+  border-top: 1px solid var(--chart-border);
+  font-size: 9px;
+  letter-spacing: 0.02em;
+}
+
+.chart-panel .chart-footer > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.chart-panel .chart-footer i {
+  width: 5px;
+  height: 5px;
+}
+
+.chart-panel .chart-legend-up {
+  background: var(--chart-mint);
+}
+
+.chart-panel .chart-legend-down {
+  background: var(--chart-down);
+}
+
+.chart-panel .chart-footer .chart-footer-label {
+  margin-left: auto;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+}
+
+@media (max-width: 420px) {
+  .chart-panel .chart-heading {
+    padding: 16px 14px;
+  }
+
+  .chart-panel .chart-ohlc {
+    padding: 12px 14px;
+  }
+
+  .chart-panel .chart-ohlc > div {
+    flex-direction: column;
+    gap: 4px;
+  }
+}
