@@ -6,11 +6,13 @@ import StarDetails from './components/StarDetails';
 import PlayerPanel from './components/PlayerPanel';
 import TradeTicket from './components/TradeTicket';
 import DemoControls from './components/DemoControls';
+import StartMenu from './components/StartMenu';
 import { useLiveMarket } from './market/useLiveMarket';
 import { usePlayerSession } from './player/usePlayerSession';
 
 export default function App() {
-  const { market, status, error, retry } = useLiveMarket();
+  const [entered, setEntered] = useState(false);
+  const { market, status, error, retry } = useLiveMarket(entered);
   const session = usePlayerSession(status);
   const [directorEnabled] = useState(() => new URLSearchParams(window.location.search).get('director') === '1');
   const [selectedAssetId, setSelectedAssetId] = useState<string>();
@@ -21,6 +23,16 @@ export default function App() {
   const assets = market?.assets;
   const selectedAsset = assets?.find((asset) => asset.id === selectedAssetId)
     ?? (assets ? [...assets].sort((a, b) => b.price - a.price || a.name.localeCompare(b.name))[0] : undefined);
+
+  useEffect(() => {
+    if (entered && !session.hasSession) {
+      setEntered(false);
+      setSelectedAssetId(undefined);
+      setOrderAssetId(undefined);
+      setOpenStory(undefined);
+      setActiveNewsId(null);
+    }
+  }, [entered, session.hasSession]);
 
   useEffect(() => {
     setSelectedAssetId((current) => assets?.some((asset) => asset.id === current)
@@ -42,6 +54,22 @@ export default function App() {
     if (!market?.news?.some((item) => item.id === id)) return;
     setActiveNewsId(id);
     setOpenStory((previous) => ({ id, request: (previous?.request ?? 0) + 1 }));
+  }
+
+  async function startSimulation(nickname: string) {
+    const joined = await session.join(nickname);
+    if (joined) setEntered(true);
+    return joined;
+  }
+
+  async function resumeSimulation() {
+    const restored = await session.resume();
+    if (restored) setEntered(true);
+    return restored;
+  }
+
+  if (!entered || !session.hasSession) {
+    return <StartMenu session={session} onStart={startSimulation} onResume={resumeSimulation} />;
   }
 
   return (

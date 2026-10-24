@@ -110,7 +110,7 @@ export class PlayerSessionController {
     this.clearErrors();
     storePlayerId(this.storage);
     this.publish({ portfolio: undefined, hasSession: false, stale: true, syncing: false, error: null,
-      notice: 'Your player is no longer on the server. The game may have restarted. Join again to play.' });
+      notice: 'Your player is no longer on the server. The game may have restarted. Enter your name to start again.' });
   }
 
   setLive(live: boolean): void {
@@ -129,10 +129,10 @@ export class PlayerSessionController {
     this.setLive(false);
   }
 
-  refresh = async (): Promise<void> => {
+  refresh = async (): Promise<boolean> => {
     const playerId = this.playerId;
     // Polling and manual refresh share an in-flight read instead of aborting a slow request.
-    if (!playerId || this.state.busy || this.readController) return;
+    if (!playerId || this.state.busy || this.readController) return false;
     this.invalidateReads();
     const revision = this.revision;
     const controller = new AbortController();
@@ -140,7 +140,7 @@ export class PlayerSessionController {
     this.publish({ syncing: true });
     try {
       const portfolio = await this.api.portfolio(playerId, controller.signal);
-      if (revision !== this.revision || playerId !== this.playerId) return;
+      if (revision !== this.revision || playerId !== this.playerId) return false;
       const notice = this.uncertainTrade
         ? 'Portfolio refreshed. Check your holdings and cash before placing another order.'
         : this.state.notice;
@@ -151,27 +151,29 @@ export class PlayerSessionController {
       this.uncertainTrade = false;
       this.refreshError = null;
       this.publish({ portfolio, stale: !this.live, syncing: false, error: this.combinedError(), notice });
+      return true;
     } catch (error) {
-      if (revision !== this.revision || playerId !== this.playerId) return;
+      if (revision !== this.revision || playerId !== this.playerId) return false;
       if (error instanceof PlayerApiError && error.status === 404) this.forgetPlayer();
       else {
         this.refreshError = `Unable to refresh your portfolio. ${message(error)}`;
         this.publish({ stale: true, syncing: false, error: this.combinedError() });
       }
+      return false;
     } finally {
       if (revision === this.revision) this.readController = undefined;
     }
   };
+
+  // Checking a saved player is read-only and does not start the shared simulation.
+  resume = (): Promise<boolean> => this.refresh();
 
   join = async (nickname: string): Promise<boolean> => {
     if (this.state.busy || this.playerId) return false;
     let name: string;
     try { name = normalizeNickname(nickname); }
     catch (error) { this.reportActionError(message(error)); return false; }
-    if (!this.live) {
-      this.reportActionError('Wait for the market connection before joining.');
-      return false;
-    }
+    // Joining starts the simulation, so it must work before opening the market feed.
     this.invalidateReads();
     this.clearErrors();
     this.publish({ busy: 'join', error: null, notice: null });

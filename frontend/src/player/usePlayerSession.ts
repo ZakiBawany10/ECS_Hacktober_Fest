@@ -7,6 +7,7 @@ import type { PlayerSessionState, SessionStorage } from './session.ts';
 
 export interface PlayerSession extends PlayerSessionState {
   join(nickname: string): Promise<boolean>;
+  resume(): Promise<boolean>;
   trade(assetId: string, side: TradeSide, qty: number): Promise<boolean>;
   refresh(): void;
 }
@@ -36,5 +37,5 @@ export function usePlayerSession(marketStatus: MarketConnectionStatus): PlayerSe
     };
   }, [controller, marketStatus]);
 
-  return { ...state, join: controller.join, trade: controller.trade, refresh: () => { void controller.refresh(); } };
+  return { ...state, join: controller.join, resume: controller.resume, trade: controller.trade, refresh: () => { void controller.refresh(); } };
 }

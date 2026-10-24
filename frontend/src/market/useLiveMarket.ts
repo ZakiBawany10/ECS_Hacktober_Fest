@@ -35,20 +35,27 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'The market connection failed.';
 }
 
-export function useLiveMarket(): {
+export function useLiveMarket(enabled = true): {
   market: MarketView | undefined;
   status: MarketConnectionStatus;
   error: string | null;
   retry: () => void;
 } {
   const [market, setMarket] = useState<MarketView>();
-  const [status, setStatus] = useState<MarketConnectionStatus>('connecting');
+  const [status, setStatus] = useState<MarketConnectionStatus>(enabled ? 'connecting' : 'offline');
   const [error, setError] = useState<string | null>(null);
   const [retryKey, setRetryKey] = useState(0);
   const hasLoaded = useRef(false);
   const retry = useCallback(() => setRetryKey((key) => key + 1), []);
 
   useEffect(() => {
+    if (!enabled) {
+      setMarket(undefined);
+      setStatus('offline');
+      setError(null);
+      hasLoaded.current = false;
+      return;
+    }
     let active = true;
     let failures = 0;
     let retryTimer: number | undefined;
@@ -202,7 +209,7 @@ export function useLiveMarket(): {
       window.clearTimeout(retryTimer);
       disposeAttempt?.();
     };
-  }, [retryKey]);
+  }, [enabled, retryKey]);
 
   return { market, status, error, retry };
 }

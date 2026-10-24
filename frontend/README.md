@@ -4,6 +4,13 @@ React + Vite + TypeScript frontend. `src/App.tsx` composes the ranked market,
 news feed, and selected-star chart/details. Styles live in `src/styles/theme.css`
 and the chart component's stylesheet.
 
+Opening the app shows a menu. Enter a name and choose **Start simulation** to
+create a player, then connect to the market. The shared server clock stays at
+tick 0 until the first player starts; later players join the running market.
+The menu does not open a market feed or start a player automatically. Saved
+players choose **Resume simulation**, which verifies their existing portfolio
+before entering. Missing players return to name entry after a server restart.
+
 The market is connected to the backend's real prices and stellar lifecycle
 data. Selection stays on the same star while rankings change. Price changes
 are absolute CR differences from the previous received tick; the initial

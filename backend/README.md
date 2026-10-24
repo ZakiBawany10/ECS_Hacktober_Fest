@@ -214,6 +214,11 @@ doesn't have.
 The frontend dev server proxies `/api/*` here, so `/join` is `/api/join` from
 the browser.
 
+The shared simulation waits at tick 0 until the first successful `POST /join`.
+Its first tick follows one tick interval later. Later players join the running
+market without resetting it; reads, WebSocket connections and loading a saved
+portfolio do not start it. The AI worker can warm up while the menu is open.
+
 | Method | Path | Body | Returns |
 |---|---|---|---|
 | POST | `/join` | `{nickname}` | `{player_id}` |

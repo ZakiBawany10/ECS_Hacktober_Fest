@@ -46,6 +46,93 @@ async function restored(overrides: Partial<PlayerApi> = {}) {
   return { controller, saved };
 }
 
+test('starting a named player works before the feed opens and waits for a live portfolio before trading', async () => {
+  const joined = deferred<string>();
+  let joins = 0;
+  let reads = 0;
+  const saved = storage();
+  const controller = new PlayerSessionController(api({
+    join: async (nickname) => { joins += 1; assert.equal(nickname, 'Pilot'); return joined.promise; },
+    portfolio: async () => { reads += 1; return portfolio(); },
+  }), saved);
+  assert.equal(joins, 0);
+  assert.equal(reads, 0);
+  assert.equal(await controller.join(' '), false);
+  assert.equal(joins, 0);
+
+  const starting = controller.join(' Pilot ');
+  assert.equal(await controller.join('Pilot'), false);
+  assert.equal(joins, 1);
+  joined.resolve('player-1');
+  assert.equal(await starting, true);
+  assert.equal(controller.getSnapshot().hasSession, true);
+  assert.equal(controller.getSnapshot().stale, true);
+  assert.equal(controller.getSnapshot().portfolio, undefined);
+  assert.equal(reads, 0);
+  assert.equal(loadPlayerId(saved), 'player-1');
+  assert.equal(await controller.trade('star-1', 'buy', 1), false);
+
+  controller.setLive(true);
+  await Promise.resolve();
+  assert.equal(reads, 1);
+  assert.equal(controller.getSnapshot().stale, false);
+  assert.equal(controller.getSnapshot().portfolio?.nickname, 'Pilot');
+});
+
+test('a saved player waits for an explicit resume and duplicate resumes share no extra requests', async () => {
+  const result = deferred<Portfolio>();
+  let reads = 0;
+  let joins = 0;
+  const controller = new PlayerSessionController(api({
+    join: async () => { joins += 1; return 'other-player'; },
+    portfolio: async () => { reads += 1; return result.promise; },
+  }), storage('player-1'));
+  assert.equal(reads, 0);
+  assert.equal(joins, 0);
+  const resuming = controller.resume();
+  assert.equal(controller.getSnapshot().syncing, true);
+  assert.equal(await controller.resume(), false);
+  assert.equal(reads, 1);
+  result.resolve(portfolio(750, 2));
+  assert.equal(await resuming, true);
+  assert.equal(controller.getSnapshot().portfolio?.holdings['star-1'], 2);
+  assert.equal(controller.getSnapshot().stale, true);
+  assert.equal(controller.getSnapshot().syncing, false);
+  assert.equal(joins, 0);
+});
+
+test('an expired saved player returns to name entry without starting another player automatically', async () => {
+  let joins = 0;
+  const saved = storage('player-1');
+  const controller = new PlayerSessionController(api({
+    join: async () => { joins += 1; return 'player-2'; },
+    portfolio: async () => { throw new PlayerApiError('Player not found', 404); },
+  }), saved);
+  assert.equal(await controller.resume(), false);
+  assert.equal(controller.getSnapshot().hasSession, false);
+  assert.equal(loadPlayerId(saved), undefined);
+  assert.equal(joins, 0);
+});
+
+test('a failed resume keeps its saved player and can be retried explicitly', async () => {
+  let reads = 0;
+  const saved = storage('player-1');
+  const controller = new PlayerSessionController(api({ portfolio: async () => {
+    reads += 1;
+    if (reads === 1) throw new PlayerApiError('Server unavailable');
+    return portfolio(750, 2);
+  } }), saved);
+  assert.equal(await controller.resume(), false);
+  assert.equal(reads, 1);
+  assert.equal(controller.getSnapshot().hasSession, true);
+  assert.equal(loadPlayerId(saved), 'player-1');
+  assert.match(controller.getSnapshot().error ?? '', /unavailable/);
+  assert.equal(await controller.resume(), true);
+  assert.equal(reads, 2);
+  assert.equal(controller.getSnapshot().error, null);
+  assert.equal(controller.getSnapshot().stale, true);
+});
+
 test('portfolio validation accepts fractional and zero holdings, and rejects corrupt balances or identities', () => {
   const raw = portfolio(12.5, 0.125);
   assert.deepEqual(parsePortfolio(raw, 'player-1'), raw);

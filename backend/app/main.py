@@ -200,7 +200,9 @@ def announce_event_news(news: EventNews) -> None:
     )
 
 
-async def tick_loop() -> None:
+async def tick_loop(started: asyncio.Event) -> None:
+    # Keep the initial universe intact while the first player enters their name.
+    await started.wait()
     while True:
         await asyncio.sleep(config.TICK_SECONDS)
         report = market.advance()
@@ -228,14 +230,18 @@ async def tick_loop() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    tasks = [asyncio.create_task(tick_loop()), asyncio.create_task(worker.run())]
-    yield
-    for task in tasks:
-        task.cancel()
-    for task in tasks:
-        with suppress(asyncio.CancelledError):
-            await task
-    await gemma.aclose()
+    app.state.simulation_started = asyncio.Event()
+    tasks = [asyncio.create_task(tick_loop(app.state.simulation_started)), asyncio.create_task(worker.run())]
+    try:
+        yield
+    finally:
+        for task in tasks:
+            task.cancel()
+        for task in tasks:
+            with suppress(asyncio.CancelledError):
+                await task
+        del app.state.simulation_started
+        await gemma.aclose()
 
 
 app = FastAPI(title="Star Market", lifespan=lifespan)
@@ -249,6 +255,10 @@ async def health() -> dict[str, str]:
 @app.post("/join")
 async def join(request: JoinRequest) -> JoinResponse:
     player = market.join(request.nickname)
+    # Joining starts this shared market once; reconnects and reads never do.
+    started = getattr(app.state, "simulation_started", None)
+    if started is not None:
+        started.set()
     return JoinResponse(player_id=player.id)
 
 

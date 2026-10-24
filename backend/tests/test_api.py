@@ -46,6 +46,7 @@ def test_history_and_websocket_tick(monkeypatch):
     assert client.get("/assets/sol-nova/history").json()[0]["t"] == 0
     assert client.get("/assets/nope/history").status_code == 404
     with TestClient(app) as live_client, live_client.websocket_connect("/ws") as ws:
+        live_client.post("/join", json={"nickname": "tick watcher"})
         message = ws.receive_json()
     assert message["type"] == "tick"
     assert {"id", "stage", "price", "L", "listed"} <= message["assets"][0].keys()
@@ -81,6 +82,7 @@ def test_stage_change_news_reaches_state(monkeypatch, fake_gemma):
 def test_websocket_sends_news(monkeypatch):
     monkeypatch.setattr(main, "market", Market(random_events=False))
     with TestClient(app) as live_client, live_client.websocket_connect("/ws") as ws:
+        live_client.post("/join", json={"nickname": "news watcher"})
         live_client.post("/director/force_stage", json={"asset_id": "kestrel"})
         messages = [ws.receive_json() for _ in range(3)]
         news = next(message for message in messages if message["type"] == "news")
@@ -118,6 +120,7 @@ def test_protostar_hides_its_true_type(monkeypatch):
 def test_director_spawn_star_lists_and_announces(monkeypatch, fake_gemma):
     monkeypatch.setattr(main, "market", Market(random_events=False))
     with TestClient(app) as live_client, live_client.websocket_connect("/ws") as ws:
+        live_client.post("/join", json={"nickname": "spawn watcher"})
         response = live_client.post("/director/spawn_star", json={"spectral_type": "M"})
         assert response.status_code == 200
         asset = response.json()
