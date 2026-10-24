@@ -8,7 +8,8 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 from . import config
-from .events import EVENT_WEIGHTS, Event, EventType, Multiplier, create_event, eligible
+from .events import EVENT_WEIGHTS, Event, EventNews, EventType, Multiplier, create_dyson, create_event, eligible
+from .events.dyson import MAX_BUILDING
 from .lifecycle import (
     DARK_STAGES,
     DECLINE_SECONDS,
@@ -26,6 +27,7 @@ from .lifecycle import (
     roll_duration_ticks,
     seconds_to_ticks,
 )
+from .newsroom import NewsKind, Side
 from .pricing import (
     PriceLeg,
     apply_impact,
@@ -50,7 +52,6 @@ from .spawn import (
 # Tolerance for float comparisons on cash and share quantities.
 EPSILON = 1e-9
 
-NewsKind = Literal["lifecycle", "event", "rumour", "system"]
 
 
 class MarketError(Exception):
@@ -108,7 +109,8 @@ class TickReport:
     """What happened during a tick that the news should cover."""
 
     stage_changes: list[StageChange] = field(default_factory=list)
-    events: list[Event] = field(default_factory=list)
+    events: list[Event] = field(default_factory=list)  # started this tick
+    event_news: list[EventNews] = field(default_factory=list)
     spawned: list[Star] = field(default_factory=list)
     forecast_updates: list[Star] = field(default_factory=list)  # protostars halfway to ignition
     delisted: list[Star] = field(default_factory=list)
@@ -123,7 +125,8 @@ class News:
     body: str
     asset_ids: list[str]
     source: str  # the outlet reporting it
-    side: Literal["human", "alien"]
+    side: Side
+    flash: bool = False  # a key moment, for a pop-up banner
 
 
 @dataclass
@@ -158,6 +161,9 @@ class Market:
         self.trades: list[Trade] = []
         self.news: deque[News] = deque(maxlen=config.NEWS_LENGTH)
         self.events: dict[str, Event] = {}
+        self.event_news: list[EventNews] = []  # queued by events, collected into each TickReport
+        self.dysons_started = 0
+        self._follow_ups: list[tuple[str, float]] = []  # (asset id, multiplier value): dimmings turning into spheres
         self.name_pool: deque[str] = deque()  # names for new stars, filled by Gemma; FALLBACK_NAMES otherwise
         for seed in SEED_STARS:
             L = generate_luminosity(MAIN_SEQUENCE_L_BOUNDS[seed["spectral_type"]], self.rng)
@@ -300,15 +306,43 @@ class Market:
         for player in self.players.values():
             player.holdings.pop(star.id, None)
 
-    def start_event(self, event_type: EventType, asset_id: str) -> Event:
-        """Start an event on a star now, or raise MarketError if it can't happen to that star."""
+    def start_event(self, event_type: EventType, asset_id: str, director: bool = False) -> Event:
+        """Start an event on a star now, or raise MarketError if it can't happen to that star.
+
+        The director skips the market-wide limits but not the one-major-event-per-star rule.
+        """
         star = self.get_star(asset_id)
-        if not eligible(event_type, star):
-            raise MarketError(f"A {event_type.replace('_', ' ')} can't happen to {star.name} as a {star.stage}")
-        event = create_event(event_type, star, self.tick, self.rng)
-        event.start(star)
+        if not eligible(event_type, star, self, director):
+            raise MarketError(f"A {event_type.replace('_', ' ')} can't happen to {star.name} right now")
+        return self._run(create_event(event_type, star, self))
+
+    def _run(self, event: Event) -> Event:
         self.events[event.id] = event
+        if event.type == "dyson_sphere":
+            self.dysons_started += 1
+        event.start(self)
         return event
+
+    def take_event_news(self) -> list[EventNews]:
+        news, self.event_news = self.event_news, []
+        return news
+
+    def has_major_event(self, star: Star) -> bool:
+        return any(event.major and event.asset_id == star.id for event in self.events.values())
+
+    def major_event_count(self) -> int:
+        return sum(event.counts_towards_cap for event in self.events.values())
+
+    def event_count(self, event_type: EventType) -> int:
+        return sum(event.type == event_type for event in self.events.values())
+
+    def can_start_dyson(self) -> bool:
+        building = sum(event.type == "dyson_sphere" and event.counts_towards_cap for event in self.events.values())
+        return building < MAX_BUILDING
+
+    def follow_up(self, asset_id: str, start_value: float) -> None:
+        """Start a Dyson sphere on this star after this tick's events, continuing from start_value."""
+        self._follow_ups.append((asset_id, start_value))
 
     def _roll_next_event_tick(self) -> int:
         """Events arrive as a Poisson process: exponential gaps averaging EVENT_MEAN_GAP_SECONDS."""
@@ -318,15 +352,22 @@ class Market:
         return self.tick + seconds_to_ticks(self.rng.expovariate(1 / config.SPAWN_MEAN_GAP_SECONDS))
 
     def _start_random_event(self) -> Event | None:
-        """Pick a type by weight among those with an eligible star, then one of those stars at random."""
+        """Pick a type by weight among those with an eligible star, then one of those stars at random.
+
+        If no Dyson sphere has started by DYSON_DEADLINE_SECONDS, this slot gets one (5.1).
+        """
         candidates = {
-            event_type: [star for star in self.stars.values() if eligible(event_type, star)]
+            event_type: [star for star in self.stars.values() if eligible(event_type, star, self)]
             for event_type in EVENT_WEIGHTS
         }
         types = [event_type for event_type, stars in candidates.items() if stars]
         if not types:
             return None
-        event_type = self.rng.choices(types, weights=[EVENT_WEIGHTS[t] for t in types])[0]
+        overdue = self.dysons_started == 0 and self.tick * config.TICK_SECONDS >= config.DYSON_DEADLINE_SECONDS
+        if overdue and candidates["dyson_sphere"]:
+            event_type: EventType = "dyson_sphere"
+        else:
+            event_type = self.rng.choices(types, weights=[EVENT_WEIGHTS[t] for t in types])[0]
         return self.start_event(event_type, self.rng.choice(candidates[event_type]).id)
 
     def advance(self) -> TickReport:
@@ -343,8 +384,12 @@ class Market:
                 report.spawned.append(self.spawn_star())
             self.next_spawn_tick = self._roll_next_spawn_tick()
         for event in list(self.events.values()):
-            if event.tick(self.stars[event.asset_id], self.tick):
+            if event.tick(self):
                 del self.events[event.id]
+        for asset_id, start_value in self._follow_ups:
+            origin = "It follows weeks of strange, ever-deeper dips in the star's light."
+            report.events.append(self._run(create_dyson(self.stars[asset_id], self.tick, self.rng, start_value, origin)))
+        self._follow_ups = []
         for star in list(self.stars.values()):
             if star.ticks_left is not None:
                 star.ticks_left -= 1
@@ -373,6 +418,7 @@ class Market:
             star.impact = decay_impact(star.impact)
             star.price = star.priced_at(star.impact)
             star.history.append((self.tick, star.price))
+        report.event_news = self.take_event_news()
         return report
 
     def add_news(
@@ -383,7 +429,8 @@ class Market:
         asset_ids: list[str],
         t: int | None = None,
         source: str = "Star Market Exchange",
-        side: Literal["human", "alien"] = "human",
+        side: Side = "human",
+        flash: bool = False,
     ) -> News:
         """Publish a news item. t defaults to now; pass the tick an event happened if it was earlier."""
         news = News(
@@ -395,6 +442,7 @@ class Market:
             asset_ids=asset_ids,
             source=source,
             side=side,
+            flash=flash,
         )
         self.news.append(news)
         return news

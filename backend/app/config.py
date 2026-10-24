@@ -19,6 +19,8 @@ LEADERBOARD_EVERY_TICKS = 5
 # Events start at random, on average this often (section 5.0.1 of the pricing doc says 30 s; shortened
 # for a busier game). Event types, weights and effects are in app/events.py.
 EVENT_MEAN_GAP_SECONDS = 20.0
+GAME_LENGTH_SECONDS = 1200.0  # the doc's standard game; nothing ends it yet
+DYSON_DEADLINE_SECONDS = 0.4 * GAME_LENGTH_SECONDS  # at least one Dyson sphere starts by minute 8 (5.1)
 # New stars spawn as protostars on average this often, while fewer than MAX_LIVING_STARS are alive.
 # Remnants (white dwarfs, neutron stars, black holes) don't count; black holes are delisted after 60 s.
 SPAWN_MEAN_GAP_SECONDS = 50.0

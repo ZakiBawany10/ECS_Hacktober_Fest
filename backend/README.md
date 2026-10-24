@@ -26,7 +26,8 @@ Check [health](http://127.0.0.1:8000/health) or open the
 | `app/market.py` | In-memory game state: stars, players, trades, net worth |
 | `app/pricing.py` | Price formula, trading pressure and per-tick luminosity noise |
 | `app/lifecycle.py` | Luminosity bounds, stage durations and lifecycle paths |
-| `app/events.py` | Price-moving events: types, weights, effects and eligibility |
+| `app/events/` | Price-moving events, one module per kind; weights and limits in `__init__.py` |
+| `app/newsroom.py` | News outlets, news kinds and how each outlet slants the figures it reports |
 | `app/seed.py` | Starting stars (one main-sequence star per spectral type) |
 | `app/spawn.py` | New stars: protostar forecasts, birth values and fallback names |
 | `app/config.py` | Game constants and env vars |
@@ -148,9 +149,31 @@ by weight among those with an eligible star:
 | `meteor_strike` | 25 | any star except a black hole | price −3% to −9%, recovers over ~30 s |
 | `stellar_flare` | 20 | main-sequence stars | price +12% to +28%, fades over ~20 s |
 | `coronal_collapse` | 10 | red giants and red hypergiants | 30–60% of the stage's remaining time removed |
+| `mysterious_dimming` | 10 | main-sequence stars, one at a time | 3–5 dips of −6% to −14% over 60–120 s |
+| `dyson_sphere` | 4 | main-sequence stars and giants, two building at a time | slides towards ~3% of the price over 300 s |
 
-Each event publishes an `event` news item. The other events in the doc aren't
-built yet; magnetar starquakes and black hole feeding are left out on purpose.
+Dimming and Dyson spheres are **major** events: at most 4 run at once, and a
+star can only have one. Each rolls a hidden outcome when it starts, which never
+leaves the server:
+
+- **Dyson sphere (5.1):** 20% complete, leaving the star at ~3% of its price
+  until it becomes a giant or goes supernova, which destroys the sphere. 80% are
+  abandoned between 15% and 85% built, and the price rallies back within ~15 s.
+  Builds pause 0–2 times either way. At least one starts by minute 8.
+- **Mysterious dimming (5.6):** 85% dust, which clears. 15% an early Dyson
+  sphere: the dips get deeper and more regular, then a sphere starts.
+
+Events report several news moments (start, progress updates, outcome). Key
+moments have `flash: true`. Dyson progress updates quote a figure, slanted by
+the outlet: StarWire and the Zr'kth overstate it, the Free Xeno Press
+understates it, the Observatory is close, and the Financial Times reports the
+previous update's figure. Reported figures stay within 15 points of the truth
+and never claim completion early. The Free Xeno Press breaks news of stalls
+and may hint at an abandonment in the 30 s before it happens.
+
+Magnetar starquakes and black hole feeding are left out on purpose; the white
+dwarf supernova and gamma-ray burst need star positions, which the backend
+doesn't have.
 
 ## API
 
@@ -176,7 +199,7 @@ stage     "protostar" | "main_sequence" | "red_giant" | "blue_giant" | "red_hype
           | "black_hole"
 Portfolio { player_id, nickname, cash, holdings: {asset_id: qty}, net_worth }
 NewsItem  { id, t, kind: "lifecycle" | "event" | "rumour" | "system", headline,
-            body, asset_ids: string[], source, side: "human" | "alien" }
+            body, asset_ids: string[], source, side: "human" | "alien", flash }
 ```
 
 `news` in `/state` holds the last 50 items, oldest first. `t` is the tick the
@@ -218,7 +241,7 @@ curl -X POST localhost:8000/director/force_stage -H 'Content-Type: application/j
 ```json
 {"type": "tick", "t": 12, "assets": [{"id": "sol-nova", "stage": "main_sequence", "price": 500.4, "L": 1.002, "listed": true}]}
 {"type": "leaderboard", "rows": [{"nickname": "zaki", "net_worth": 10012.5}]}
-{"type": "news", "item": {"id": "…", "t": 41, "kind": "lifecycle", "headline": "Kestrel goes supernova", "body": "…", "asset_ids": ["kestrel"], "source": "StarWire", "side": "human"}}
+{"type": "news", "item": {"id": "…", "t": 41, "kind": "lifecycle", "headline": "Kestrel goes supernova", "body": "…", "asset_ids": ["kestrel"], "source": "StarWire", "side": "human", "flash": false}}
 {"type": "listed", "asset": {"id": "fathom", "stage": "protostar", "…": "a full Asset"}}
 {"type": "delisted", "asset_id": "kestrel"}
 ```

@@ -16,6 +16,7 @@ from app.lifecycle import (
     next_stage,
     seconds_to_ticks,
 )
+from app.events import MAJOR_TYPES, MOMENTS, eligible
 from app.market import Market, MarketError, NotFoundError
 from app.pricing import apply_impact, luminosity_from_price, market_price, price_from_luminosity, twinkle
 
@@ -508,3 +509,116 @@ def test_protostars_dodge_events():
     for event_type in ("meteor_strike", "stellar_flare", "coronal_collapse"):
         with pytest.raises(MarketError):
             market.start_event(event_type, star.id)
+
+
+def start_dyson(market: Market, star_id: str = "sol-nova", completes=True, stop=1.0, stalls=()):
+    event = market.start_event("dyson_sphere", star_id, director=True)
+    event.completes, event.stop_progress, event.stalls = completes, stop, list(stalls)
+    return event
+
+
+def news_moments(market: Market, ticks: int) -> list[tuple[str, str]]:
+    moments = []
+    for _ in range(ticks):
+        moments += [(news.event_type, news.moment) for news in market.advance().event_news]
+    return moments
+
+
+def test_dyson_sphere_dims_along_the_build_curve_and_completes():
+    market = make_market()
+    star = market.stars["sol-nova"]
+    event = start_dyson(market)
+    assert [(n.moment, n.flash) for n in market.take_event_news()] == [("start", True)]
+    for _ in range(seconds_to_ticks(60)):
+        market.advance()
+    assert star.event_multiplier == pytest.approx(1 - 0.97 * 0.36, abs=0.03)  # 5.1 table: 65% at 60 s
+    moments = news_moments(market, seconds_to_ticks(250))
+    assert ("dyson_sphere", "complete") in moments
+    assert moments.count(("dyson_sphere", "update")) >= 6
+    assert star.event_multiplier == pytest.approx(0.03, abs=0.005)
+    assert event.id in market.events and not event.counts_towards_cap  # enclosed for good
+    assert market.has_major_event(star)
+
+
+def test_abandoned_dyson_sphere_rallies_back():
+    market = make_market()
+    star = market.stars["sol-nova"]
+    event = start_dyson(market, completes=False, stop=0.5)
+    moments = news_moments(market, seconds_to_ticks(140))
+    assert ("dyson_sphere", "abandoned") in moments
+    assert event.id not in market.events and star.multipliers == {}
+
+
+def test_dyson_stall_pauses_progress():
+    market = make_market()
+    event = start_dyson(market, stalls=[(10, 20)])
+    moments = news_moments(market, 40)
+    assert ("dyson_sphere", "stall") in moments
+    assert event.build_ticks == 20
+
+
+def test_star_evolving_destroys_its_dyson_sphere():
+    market = make_market()
+    star = market.stars["sol-nova"]
+    event = start_dyson(market)
+    for _ in range(seconds_to_ticks(120)):
+        market.advance()
+    market.force_next_stage("sol-nova")
+    moments = news_moments(market, seconds_to_ticks(40))
+    assert ("dyson_sphere", "destroyed") in moments
+    assert event.id not in market.events and star.multipliers == {}
+
+
+def test_mysterious_dimming_dips_then_clears():
+    market = make_market()
+    star = market.stars["kora"]
+    event = market.start_event("mysterious_dimming", "kora")
+    event.early_dyson = False
+    lowest = 1.0
+    moments = []
+    while event.id in market.events:
+        moments += [(n.event_type, n.moment) for n in market.advance().event_news]
+        lowest = min(lowest, star.event_multiplier)
+    assert lowest < 0.95
+    assert [m for _, m in moments] == ["start", "update", "cleared"]
+    assert star.multipliers == {}
+
+
+def test_early_dyson_dimming_turns_into_a_sphere_without_a_jump():
+    market = make_market()
+    star = market.stars["kora"]
+    dimming = market.start_event("mysterious_dimming", "kora")
+    dimming.early_dyson = True
+    while dimming.id in market.events:
+        before = star.event_multiplier
+        report = market.advance()
+    [sphere] = report.events
+    assert sphere.type == "dyson_sphere" and sphere.asset_id == "kora"
+    assert star.event_multiplier == pytest.approx(before, abs=0.02)
+    assert ("dyson_sphere", "start") in [(n.event_type, n.moment) for n in report.event_news]
+
+
+def test_major_event_limits():
+    market = make_market()
+    start_dyson(market, "sol-nova")
+    with pytest.raises(MarketError):
+        market.start_event("mysterious_dimming", "sol-nova", director=True)  # one major per star
+    for star_id in ("kora", "ember", "fenwick"):
+        market.start_event("dyson_sphere" if star_id == "kora" else "mysterious_dimming", star_id, director=True)
+    assert market.major_event_count() == 4
+    assert not market.can_start_dyson()  # two building already
+    assert not any(eligible(t, market.stars["altra"], market) for t in MAJOR_TYPES)  # market-wide cap
+    market.start_event("meteor_strike", "altra")  # minor events don't count
+
+
+def test_a_dyson_sphere_starts_by_minute_eight():
+    market = Market(rng=random.Random(3))
+    for _ in range(seconds_to_ticks(config.DYSON_DEADLINE_SECONDS + 120)):
+        market.advance()
+    assert market.dysons_started >= 1
+
+
+def test_every_event_news_moment_is_known():
+    market = Market(rng=random.Random(4))
+    moments = news_moments(market, 3000)
+    assert moments and all(moment in MOMENTS[event_type] for event_type, moment in moments)

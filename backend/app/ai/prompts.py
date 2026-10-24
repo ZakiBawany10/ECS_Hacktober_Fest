@@ -1,13 +1,13 @@
 """What Gemma is asked, the JSON it must reply with, and the templates used when it can't."""
 
 import re
-from dataclasses import dataclass
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, StringConstraints
 
 from ..events import EventType
 from ..lifecycle import STAGE_LABELS, Stage
+from ..newsroom import OUTLETS, Outlet
 
 SYSTEM = (
     "You write for Star Market, a live stock market game where the assets are stars and a star's share "
@@ -15,53 +15,13 @@ SYSTEM = (
 )
 
 
-@dataclass(frozen=True)
-class Outlet:
-    """A news source in the game, from section 5.0.5 of the pricing doc. Each item gets one at random."""
-
-    name: str
-    side: Literal["human", "alien"]
-    voice: str
-
-
-OUTLETS = [
-    Outlet(
-        "Galactic Financial Times",
-        "human",
-        "You are measured and market-focused, like a serious financial paper: calm, precise, about what it means for investors.",
-    ),
-    Outlet(
-        "StarWire",
-        "human",
-        "You are a fast, sensational tabloid: breathless, exaggerated, fond of exclamation marks and puns.",
-    ),
-    Outlet(
-        "Orbital Observatory Bulletin",
-        "human",
-        "You are a cautious scientific bulletin: you explain the astrophysics plainly and hedge ('data suggests...').",
-    ),
-    Outlet(
-        "Zr'kth Construction Authority",
-        "alien",
-        "You are the official state feed of the Zr'kth, an alien empire of builders. Write like an imperial "
-        "ministry: grandiose propaganda that presents every event as part of the Zr'kth's grand design, calls "
-        "humans 'carbon traders', and praises 'the glorious Zr'kth'.",
-    ),
-    Outlet(
-        "Free Xeno Press",
-        "alien",
-        "You are a dissident alien underground press: sceptical and sardonic. You call the Zr'kth 'the "
-        "regime', distrust human markets too, and always point out what could go wrong.",
-    ),
-]
-
-
 def outlet_system_prompt(outlet: Outlet) -> str:
     return (
         f"You are {outlet.name}, a{'n' if outlet.side == 'alien' else ''} {outlet.side} news outlet covering "
         "Star Market, a live stock market game where the assets are stars and a star's share price follows its "
         f"brightness. {outlet.voice} Write in that voice, but stick to the facts you are given: never change "
-        "what happened or which way a price is moving. Never quote prices, percentages or share counts. "
+        "what happened or which way a price is moving. Never quote prices or share counts, and use no "
+        "numbers except those in the facts. "
         "Reply with JSON only."
     )
 
@@ -114,38 +74,89 @@ FALLBACKS: dict[Stage, tuple[str, str]] = {
 }
 
 
-# What happened, filled in with the event's facts plus {name} and {stage}. Gemma writes from this.
-EVENT_NOTES: dict[EventType, str] = {
-    "meteor_strike": (
+# What happened at each moment of an event, filled in with its facts plus {name} and {stage}. Gemma
+# writes from this. Notes never reveal a hidden outcome: facts like {hint} carry what code allows.
+EVENT_NOTES: dict[tuple[EventType, str], str] = {
+    ("meteor_strike", "start"): (
         "A {size} meteor storm has hit {name}, a {stage}. Its light has dipped, so its price has dropped, "
         "but it should recover within about half a minute."
     ),
-    "stellar_flare": (
+    ("stellar_flare", "start"): (
         "{name}, a {stage}, has erupted in a {size} stellar flare. Its price has jumped, "
         "but the flare fades within about 20 seconds."
     ),
-    "coronal_collapse": (
+    ("coronal_collapse", "start"): (
         "{name}, a {stage}, is collapsing faster than forecast: it will become a {next_stage} much sooner "
         "than expected."
     ),
+    ("mysterious_dimming", "start"): (
+        "{name}, a {stage}, has started dimming in strange, irregular dips, and its price is wobbling. "
+        "Nobody knows why: it could be dust or comets, or something being built. Don't say which."
+    ),
+    ("mysterious_dimming", "update"): (
+        "{name} keeps dimming in odd dips. Speculate in your outlet's style (a tabloid might cry alien "
+        "megastructure, a scientist might lean towards dust), but don't state the cause as fact."
+    ),
+    ("mysterious_dimming", "cleared"): (
+        "The strange dimming of {name} has stopped: it was dust after all, and its light and price are "
+        "returning to normal."
+    ),
+    ("dyson_sphere", "start"): (
+        "Unidentified structures have been detected around {name}, a {stage}: someone appears to be "
+        "building a Dyson sphere to capture its light. {origin} As the sphere grows, the star will look "
+        "dimmer and its price will fall. Nobody knows yet whether it will be finished."
+    ),
+    ("dyson_sphere", "update"): (
+        "Progress report on the Dyson sphere around {name}: it is about {progress} complete, and the star's "
+        "price keeps falling as more light is blocked. {status} {hint}"
+    ),
+    ("dyson_sphere", "stall"): (
+        "Construction crews around {name} have gone idle: work on its Dyson sphere has stopped, for now. "
+        "It isn't clear whether it will restart."
+    ),
+    ("dyson_sphere", "abandoned"): (
+        "The Dyson sphere around {name} has been abandoned half-built. The star's light is flooding back and "
+        "its price is rallying sharply."
+    ),
+    ("dyson_sphere", "complete"): (
+        "The Dyson sphere around {name} is complete. The star is enclosed, almost none of its light escapes, "
+        "and its shares are near worthless. Only the star swelling or exploding could break the sphere."
+    ),
+    ("dyson_sphere", "destroyed"): (
+        "{name} has become a {stage} and torn its Dyson sphere apart. Its light, and its price, are back."
+    ),
 }
 
-EVENT_FALLBACKS: dict[EventType, tuple[str, str]] = {
-    "meteor_strike": ("Meteor storm batters {name}", "{name} has dimmed after a meteor strike. A recovery is expected within the minute."),
-    "stellar_flare": ("{name} erupts in a stellar flare", "A flare has lit up {name}, but it should fade within half a minute."),
-    "coronal_collapse": ("{name}'s core is collapsing early", "{name} will become a {next_stage} sooner than expected."),
+EVENT_FALLBACKS: dict[tuple[EventType, str], tuple[str, str]] = {
+    ("meteor_strike", "start"): ("Meteor storm batters {name}", "{name} has dimmed after a meteor strike. A recovery is expected within the minute."),
+    ("stellar_flare", "start"): ("{name} erupts in a stellar flare", "A flare has lit up {name}, but it should fade within half a minute."),
+    ("coronal_collapse", "start"): ("{name}'s core is collapsing early", "{name} will become a {next_stage} sooner than expected."),
+    ("mysterious_dimming", "start"): ("{name} dims mysteriously", "Strange dips in {name}'s light have traders guessing: dust, or something else?"),
+    ("mysterious_dimming", "update"): ("{name} keeps flickering", "The dips in {name}'s light continue, and so does the speculation."),
+    ("mysterious_dimming", "cleared"): ("{name}'s dimming was just dust", "The dips have cleared and {name}'s price is recovering."),
+    ("dyson_sphere", "start"): ("Structures detected around {name}", "Someone is building a Dyson sphere around {name}, and its light is fading."),
+    ("dyson_sphere", "update"): ("{name}'s Dyson sphere about {progress} built", "More of {name}'s light is blocked as construction continues."),
+    ("dyson_sphere", "stall"): ("Work stalls on {name}'s Dyson sphere", "Construction crews around {name} have gone idle."),
+    ("dyson_sphere", "abandoned"): ("{name}'s Dyson sphere abandoned", "The builders have walked away and {name}'s price is rallying."),
+    ("dyson_sphere", "complete"): ("{name} fully enclosed", "The Dyson sphere around {name} is finished. Its shares are near worthless."),
+    ("dyson_sphere", "destroyed"): ("{name} shatters its Dyson sphere", "{name} has become a {stage}, and its light is back."),
 }
 
 _HEADLINE_REQUEST = "Write a headline of at most 12 words and a body of one or two sentences."
 
 
-def event_prompt(event_type: EventType, facts: dict[str, str]) -> str:
-    return f"{EVENT_NOTES[event_type].format(**facts)} {_HEADLINE_REQUEST}"
+def _fill(template: str, facts: dict[str, str]) -> str:
+    """Fill a template, tidying the gaps left by empty facts."""
+    return " ".join(template.format(**facts).split())
 
 
-def event_fallback(event_type: EventType, facts: dict[str, str]) -> Headline:
-    headline, body = EVENT_FALLBACKS[event_type]
-    return Headline(headline=headline.format(**facts), body=body.format(**facts))
+def event_prompt(event_type: EventType, moment: str, facts: dict[str, str]) -> str:
+    return f"{_fill(EVENT_NOTES[event_type, moment], facts)} {_HEADLINE_REQUEST}"
+
+
+def event_fallback(event_type: EventType, moment: str, facts: dict[str, str]) -> Headline:
+    headline, body = EVENT_FALLBACKS[event_type, moment]
+    return Headline(headline=_fill(headline, facts), body=_fill(body, facts))
 
 
 def stage_change_prompt(name: str, spectral_type: str, old_stage: Stage, new_stage: Stage, note: str = "") -> str:

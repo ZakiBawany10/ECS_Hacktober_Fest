@@ -1,5 +1,6 @@
 import asyncio
 import json
+import random
 
 import httpx
 import pytest
@@ -14,9 +15,11 @@ from app.ai.prompts import (
     STAGE_NOTES,
     Headline,
     event_fallback,
+    event_prompt,
     stage_change_fallback,
 )
-from app.events import EVENT_WEIGHTS
+from app.events import EVENT_WEIGHTS, MOMENTS
+from app.newsroom import percent, reported_progress
 from app.ai.worker import AIWorker
 from conftest import FakeChatClient
 
@@ -114,11 +117,26 @@ def test_worker_skips_gemma_once_deadline_has_passed():
     assert client.prompts == []
 
 
-def test_every_event_type_has_a_note_and_fallback():
-    assert set(EVENT_NOTES) == set(EVENT_FALLBACKS) == set(EVENT_WEIGHTS)
-    facts = {"name": "Kora", "stage": "red giant", "size": "heavy", "next_stage": "white dwarf"}
-    for event_type in EVENT_WEIGHTS:
-        assert "Kora" in event_fallback(event_type, facts).headline
+def test_every_event_moment_has_a_note_and_fallback():
+    moments = {(event_type, moment) for event_type, names in MOMENTS.items() for moment in names}
+    assert set(EVENT_NOTES) == set(EVENT_FALLBACKS) == moments
+    assert set(MOMENTS) == set(EVENT_WEIGHTS)
+    facts = {
+        "name": "Kora", "stage": "red giant", "size": "heavy", "next_stage": "white dwarf",
+        "origin": "", "progress": "40%", "status": "", "hint": "",
+    }  # fmt: skip
+    for event_type, moment in moments:
+        assert "Kora" in event_fallback(event_type, moment, facts).body + event_fallback(event_type, moment, facts).headline
+        assert "  " not in event_prompt(event_type, moment, facts)
+
+
+def test_outlets_slant_progress_within_limits():
+    rng = random.Random(0)
+    for outlet in OUTLETS:
+        for true in (0.0, 0.3, 0.9, 0.99):
+            reported = reported_progress(outlet, true, previous=max(true - 0.1, 0), rng=rng)
+            assert abs(reported - true) <= 0.15 + 1e-9 and 0 <= reported <= 0.95
+    assert percent(0.437) == "45%"
 
 
 def run_names_job(client, avoid):

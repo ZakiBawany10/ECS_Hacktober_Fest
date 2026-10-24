@@ -16,9 +16,9 @@ from .ai.prompts import (
     star_news_prompt,
 )
 from .ai.worker import AIWorker
-from .events import Event
-from .lifecycle import STAGE_LABELS
-from .market import Market, MarketError, News, NewsKind, NotFoundError, Player, StageChange, Star
+from .events import EventNews
+from .market import Market, MarketError, News, NotFoundError, Player, StageChange, Star
+from .newsroom import OUTLETS_BY_NAME, NewsKind
 from .pricing import price_from_luminosity
 from .spawn import projected_profile
 from .models import (
@@ -115,6 +115,7 @@ def news_out(news: News) -> NewsItem:
         asset_ids=list(news.asset_ids),
         source=news.source,
         side=news.side,
+        flash=news.flash,
     )
 
 
@@ -122,12 +123,12 @@ def news_out(news: News) -> NewsItem:
 NAME_POOL_LOW = 3
 
 
-def publisher(kind: NewsKind, asset_ids: list[str], t: int):
+def publisher(kind: NewsKind, asset_ids: list[str], t: int, flash: bool = False):
     """Return a callback that publishes a finished headline to the feed and the WebSocket."""
 
     async def publish(headline: Headline, outlet: Outlet) -> None:
         news = market.add_news(
-            kind, headline.headline, headline.body, asset_ids, t=t, source=outlet.name, side=outlet.side
+            kind, headline.headline, headline.body, asset_ids, t=t, source=outlet.name, side=outlet.side, flash=flash
         )
         await connections.broadcast(NewsMessage(item=news_out(news)))
 
@@ -172,11 +173,15 @@ async def announce_delisting(star: Star) -> None:
     worker.request_headline(star_news_prompt("delisted", facts), star_news_fallback("delisted", facts), publish)
 
 
-def announce_event(event: Event) -> None:
-    star = market.get_star(event.asset_id)
-    facts = {"name": star.name, "stage": STAGE_LABELS[star.stage], **event.facts}
-    publish = publisher("event", [star.id], event.t)
-    worker.request_headline(event_prompt(event.type, facts), event_fallback(event.type, facts), publish)
+def announce_event_news(news: EventNews) -> None:
+    publish = publisher(news.kind, news.asset_ids, news.t, news.flash)
+    outlet = OUTLETS_BY_NAME[news.outlet] if news.outlet else None
+    worker.request_headline(
+        event_prompt(news.event_type, news.moment, news.facts),
+        event_fallback(news.event_type, news.moment, news.facts),
+        publish,
+        outlet,
+    )
 
 
 async def tick_loop() -> None:
@@ -194,8 +199,8 @@ async def tick_loop() -> None:
             announce_stage_change(change)
         for star in report.forecast_updates:
             announce_forecast(star)
-        for event in report.events:
-            announce_event(event)
+        for news in report.event_news:
+            announce_event_news(news)
         ticks = [
             AssetTick(id=s.id, stage=s.stage, price=s.price, L=s.L, listed=s.listed) for s in market.stars.values()
         ]
@@ -293,12 +298,13 @@ async def spawn_star(request: SpawnStarRequest) -> Asset:
 @app.post("/director/fire_event")
 async def fire_event(request: FireEventRequest) -> Asset:
     try:
-        event = market.start_event(request.type, request.asset_id)
+        event = market.start_event(request.type, request.asset_id, director=True)
     except NotFoundError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
     except MarketError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
-    announce_event(event)
+    for news in market.take_event_news():
+        announce_event_news(news)
     return asset_out(market.get_star(event.asset_id))
 
 

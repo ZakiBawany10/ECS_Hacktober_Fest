@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field, StringConstraints
 
 from .events import EventType
 from .lifecycle import Stage
-from .market import NewsKind
+from .newsroom import NewsKind
 
 Nickname = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=20)]
 
@@ -91,6 +91,7 @@ class NewsItem(BaseModel):
     asset_ids: list[str]
     source: str  # the outlet reporting it, such as "StarWire"
     side: Literal["human", "alien"]
+    flash: bool  # a key moment: worth a pop-up banner
 
 
 class StateSnapshot(BaseModel):
