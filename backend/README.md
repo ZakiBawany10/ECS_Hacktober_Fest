@@ -25,11 +25,31 @@ Check [health](http://127.0.0.1:8000/health) or open the
 | `app/models.py` | Request/response shapes shared with the frontend |
 | `app/market.py` | In-memory game state: stars, players, trades, net worth |
 | `app/pricing.py` | Price formula and per-tick luminosity noise |
+| `app/lifecycle.py` | Luminosity bounds, stage durations and lifecycle paths |
 | `app/seed.py` | Starting stars (one main-sequence star per spectral type) |
 | `app/config.py` | Game constants; `TICK_SECONDS` env var (default 1.0) |
 
 Pricing follows `docs/main_sequence_pricing_data.md`:
 `price = 100 × (log10(L/L☉) + 5)`, with 1000 shares per star.
+
+## Lifecycle
+
+Each star's luminosity is generated within bounds: at startup from its spectral
+type's main-sequence range (Table 1 of the pricing doc), and again whenever it
+enters a new stage. After a stage change, L eases towards the new value through
+the twinkle's mean reversion; a supernova jumps straight to its value. Mass
+decides the path:
+
+```text
+mass >= 8    main_sequence → red_supergiant → supernova → neutron_star (< 22) | black_hole (>= 22)
+0.5 – 8      main_sequence → red_giant → planetary_nebula → white_dwarf
+< 0.5        main_sequence (never evolves in a session)
+```
+
+**The bounds after the main sequence are placeholders** (`STAGE_L_BOUNDS` in
+`app/lifecycle.py`) until the real values are ready. Stage durations are compressed for the
+demo. `spectral_type`, `mass` and `temperature` are birth values and don't
+change as a star evolves.
 
 ## API
 
@@ -45,8 +65,10 @@ the browser.
 | POST | `/trade` | `{player_id, asset_id, side: "buy"\|"sell", qty}` | `Portfolio` |
 
 ```text
-Asset     { id, name, kind: "star", spectral_type, mass, temperature, L, price,
-            shares_total, shares_available }
+Asset     { id, name, kind: "star", stage, spectral_type, mass, temperature, L,
+            price, shares_total, shares_available }
+stage     "main_sequence" | "red_giant" | "red_supergiant" | "supernova"
+          | "planetary_nebula" | "white_dwarf" | "neutron_star" | "black_hole"
 Portfolio { player_id, nickname, cash, holdings: {asset_id: qty}, net_worth }
 ```
 
@@ -57,7 +79,7 @@ invalid body. Quantities may be fractional; trades fill at the current price.
 **WebSocket `/ws`** (server → client):
 
 ```json
-{"type": "tick", "t": 12, "assets": [{"id": "sol-nova", "price": 500.4, "L": 1.002}]}
+{"type": "tick", "t": 12, "assets": [{"id": "sol-nova", "stage": "main_sequence", "price": 500.4, "L": 1.002}]}
 {"type": "leaderboard", "rows": [{"nickname": "zaki", "net_worth": 10012.5}]}
 ```
 
@@ -66,6 +88,6 @@ start, then apply `tick` messages on top.
 
 ## Not built yet
 
-Stellar lifecycle stages, random events, nebulae, news feed, director
+Nebulae and protostars, random events, news feed, director
 endpoints, Gemma integration and persistence. State resets when the server
 restarts.

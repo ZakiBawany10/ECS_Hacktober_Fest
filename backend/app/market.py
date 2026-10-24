@@ -5,6 +5,16 @@ from collections import deque
 from dataclasses import dataclass, field
 
 from . import config
+from .lifecycle import (
+    MAIN_SEQUENCE_L_BOUNDS,
+    SNAP_STAGES,
+    STAGE_L_BOUNDS,
+    Stage,
+    generate_luminosity,
+    next_stage,
+    roll_duration_ticks,
+    seconds_to_ticks,
+)
 from .pricing import price_from_luminosity, twinkle
 from .seed import SEED_STARS
 
@@ -30,6 +40,8 @@ class Star:
     base_L: float  # server-only: the luminosity twinkle reverts towards
     L: float
     price: float
+    stage: Stage = "main_sequence"
+    ticks_left: int | None = None  # ticks until the next stage; None means the star never evolves
     shares_held: float = 0.0
     history: deque[tuple[int, float]] = field(default_factory=lambda: deque(maxlen=config.HISTORY_LENGTH))
 
@@ -68,22 +80,42 @@ class Market:
         self.players: dict[str, Player] = {}
         self.trades: list[Trade] = []
         for seed in SEED_STARS:
+            L = generate_luminosity(MAIN_SEQUENCE_L_BOUNDS[seed["spectral_type"]], self.rng)
             star = Star(
                 id=seed["id"],
                 name=seed["name"],
                 spectral_type=seed["spectral_type"],
                 mass=seed["mass"],
                 temperature=seed["temperature"],
-                base_L=seed["L"],
-                L=seed["L"],
-                price=price_from_luminosity(seed["L"]),
+                base_L=L,
+                L=L,
+                price=price_from_luminosity(L),
             )
+            star.ticks_left = roll_duration_ticks(star.stage, star.mass, self.rng)
+            if star.ticks_left is not None and "seconds_left" in seed:
+                star.ticks_left = seconds_to_ticks(seed["seconds_left"])
             star.history.append((self.tick, star.price))
             self.stars[star.id] = star
+
+    def _enter_stage(self, star: Star, stage: Stage) -> None:
+        star.stage = stage
+        star.ticks_left = roll_duration_ticks(stage, star.mass, self.rng)
+        # Twinkle's mean reversion eases L towards the new base_L over the next few ticks.
+        star.base_L = generate_luminosity(STAGE_L_BOUNDS[stage], self.rng)
+        if stage in SNAP_STAGES:
+            star.L = star.base_L
 
     def advance(self) -> None:
         self.tick += 1
         for star in self.stars.values():
+            if star.ticks_left is not None:
+                star.ticks_left -= 1
+                if star.ticks_left <= 0:
+                    stage = next_stage(star.stage, star.mass)
+                    if stage is None:
+                        star.ticks_left = None
+                    else:
+                        self._enter_stage(star, stage)
             star.L = twinkle(star.L, star.base_L, self.rng)
             star.price = price_from_luminosity(star.L)
             star.history.append((self.tick, star.price))

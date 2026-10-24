@@ -46,6 +46,7 @@ def asset_out(star: Star) -> Asset:
         id=star.id,
         name=star.name,
         kind="star",
+        stage=star.stage,
         spectral_type=star.spectral_type,
         mass=star.mass,
         temperature=star.temperature,
@@ -74,7 +75,7 @@ async def tick_loop() -> None:
     while True:
         await asyncio.sleep(config.TICK_SECONDS)
         market.advance()
-        ticks = [AssetTick(id=s.id, price=s.price, L=s.L) for s in market.stars.values()]
+        ticks = [AssetTick(id=s.id, stage=s.stage, price=s.price, L=s.L) for s in market.stars.values()]
         await connections.broadcast(TickMessage(t=market.tick, assets=ticks))
         if market.tick % config.LEADERBOARD_EVERY_TICKS == 0:
             await connections.broadcast(LeaderboardMessage(rows=leaderboard_out()))

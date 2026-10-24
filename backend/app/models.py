@@ -4,6 +4,8 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, StringConstraints
 
+from .lifecycle import Stage
+
 Nickname = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=20)]
 
 
@@ -26,7 +28,8 @@ class Asset(BaseModel):
     id: str
     name: str
     kind: Literal["star"]
-    spectral_type: str
+    stage: Stage
+    spectral_type: str  # at birth; stays the same as the star evolves
     mass: float  # solar masses
     temperature: float  # kelvin
     L: float  # luminosity, solar units
@@ -37,6 +40,7 @@ class Asset(BaseModel):
 
 class AssetTick(BaseModel):
     id: str
+    stage: Stage
     price: float
     L: float
 

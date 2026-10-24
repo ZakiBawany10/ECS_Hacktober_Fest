@@ -1,8 +1,10 @@
+import math
 import random
 
 import pytest
 
 from app import config
+from app.lifecycle import MAIN_SEQUENCE_L_BOUNDS, STAGE_L_BOUNDS, generate_luminosity
 from app.market import Market, MarketError, NotFoundError
 from app.pricing import price_from_luminosity, twinkle
 
@@ -94,3 +96,75 @@ def test_advance_records_history():
     star = market.stars["sol-nova"]
     assert [t for t, _ in star.history] == [0, 1, 2]
     assert star.price == price_from_luminosity(star.L)
+
+
+def test_seeded_luminosity_is_within_spectral_bounds():
+    market = make_market()
+    for star in market.stars.values():
+        low, high = MAIN_SEQUENCE_L_BOUNDS[star.spectral_type]
+        assert low <= star.L <= high
+        assert star.base_L == star.L
+        assert star.stage == "main_sequence"
+
+
+def test_generate_luminosity_stays_in_bounds():
+    rng = random.Random(1)
+    for bounds in [*MAIN_SEQUENCE_L_BOUNDS.values(), *STAGE_L_BOUNDS.values()]:
+        for _ in range(200):
+            assert bounds[0] <= generate_luminosity(bounds, rng) <= bounds[1] * (1 + 1e-12)
+
+
+def walk_lifecycle(market: Market, star_id: str) -> list[str]:
+    """Advance a star through every stage, skipping the waiting, and return the stages it visited."""
+    star = market.stars[star_id]
+    stages = [star.stage]
+    while star.ticks_left is not None:
+        star.ticks_left = 1
+        market.advance()
+        if star.stage != stages[-1]:
+            stages.append(star.stage)
+            low, high = STAGE_L_BOUNDS[star.stage]
+            assert low <= star.base_L <= high * (1 + 1e-12)
+        assert star.price == price_from_luminosity(star.L)
+    return stages
+
+
+def test_heavy_stars_go_supernova():
+    market = make_market()
+    assert walk_lifecycle(market, "kestrel") == [
+        "main_sequence", "red_supergiant", "supernova", "black_hole",
+    ]  # 40 M☉
+    assert walk_lifecycle(market, "brightwater") == [
+        "main_sequence", "red_supergiant", "supernova", "neutron_star",
+    ]  # 8 M☉
+
+
+def test_sun_like_star_becomes_white_dwarf():
+    market = make_market()
+    assert walk_lifecycle(market, "sol-nova") == [
+        "main_sequence", "red_giant", "planetary_nebula", "white_dwarf",
+    ]
+
+
+def test_red_dwarf_never_evolves():
+    market = make_market()
+    star = market.stars["ember"]
+    assert star.ticks_left is None
+    for _ in range(50):
+        market.advance()
+    assert star.stage == "main_sequence"
+
+
+def test_supernova_snaps_to_new_luminosity():
+    market = make_market()
+    star = market.stars["kestrel"]
+    star.stage = "red_supergiant"
+    star.ticks_left = 1
+    market.advance()
+    assert star.stage == "supernova"
+    assert abs(math.log10(star.L) - math.log10(star.base_L)) < 0.05  # only one tick of twinkle
+
+
+def test_seconds_left_starts_star_late_in_life():
+    market = make_market()
+    assert market.stars["kestrel"].ticks_left == round(40 / config.TICK_SECONDS)

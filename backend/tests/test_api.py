@@ -22,6 +22,7 @@ def test_join_trade_and_portfolio():
 def test_state_lists_assets_and_leaderboard():
     body = client.get("/state").json()
     assert {asset["id"] for asset in body["assets"]} >= {"kestrel", "sol-nova", "ember"}
+    assert {asset["stage"] for asset in body["assets"]} == {"main_sequence"}
     assert "leaderboard" in body
 
 
@@ -42,4 +43,4 @@ def test_history_and_websocket_tick():
     with TestClient(app) as live_client, live_client.websocket_connect("/ws") as ws:
         message = ws.receive_json()
     assert message["type"] == "tick"
-    assert {"id", "price", "L"} <= message["assets"][0].keys()
+    assert {"id", "stage", "price", "L"} <= message["assets"][0].keys()
