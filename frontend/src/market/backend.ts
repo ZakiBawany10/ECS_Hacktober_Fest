@@ -57,7 +57,24 @@ export interface BackendListedMessage {
   asset: BackendAsset;
 }
 
-export type BackendMarketMessage = BackendTick | BackendNewsMessage | BackendListedMessage;
+/** A star's details changed: a protostar ignited, or a merger or mass transfer changed its type. */
+export interface BackendAssetUpdatedMessage {
+  type: 'asset_updated';
+  asset: BackendAsset;
+}
+
+/** A star left the exchange: absorbed in a merger, or a black hole delisted. */
+export interface BackendRemovedMessage {
+  type: 'merged' | 'delisted';
+  assetId: string;
+}
+
+export type BackendMarketMessage =
+  | BackendTick
+  | BackendNewsMessage
+  | BackendListedMessage
+  | BackendAssetUpdatedMessage
+  | BackendRemovedMessage;
 
 export interface LiveMarketState {
   market: MarketView;
@@ -99,6 +116,12 @@ function stage(value: unknown): BackendStage {
   return value as BackendStage;
 }
 
+/** Delisted stars stay in the backend's data (for a star map) with listed: false; keep them off the exchange. */
+function listedOnly(value: unknown): unknown {
+  if (!Array.isArray(value)) return value;
+  return value.filter((asset) => !(asset && typeof asset === 'object' && (asset as Record<string, unknown>).listed === false));
+}
+
 function uniqueAssets<T extends { id: string }>(value: unknown, parse: (value: unknown) => T): T[] {
   if (!Array.isArray(value)) throw new Error('Invalid market assets: expected a list.');
   const assets = value.map(parse);
@@ -137,7 +160,7 @@ export function parseSnapshot(value: unknown): BackendSnapshot {
   const snapshot = record(value, 'market snapshot');
   return {
     t: tick(snapshot.t),
-    assets: uniqueAssets(snapshot.assets, parseAsset),
+    assets: uniqueAssets(listedOnly(snapshot.assets), parseAsset),
     ...parseNewsSnapshot(snapshot.news),
   };
 }
@@ -146,7 +169,7 @@ export function parseSnapshot(value: unknown): BackendSnapshot {
 export function parseTickMessage(value: unknown): BackendTick | null {
   const message = record(value, 'market message');
   if (message.type !== 'tick') return null;
-  return { type: 'tick', t: tick(message.t), assets: uniqueAssets(message.assets, parseAssetTick) };
+  return { type: 'tick', t: tick(message.t), assets: uniqueAssets(listedOnly(message.assets), parseAssetTick) };
 }
 
 /** Ignore unrelated protocol messages while validating both supported streams. */
@@ -154,6 +177,10 @@ export function parseMarketMessage(value: unknown): BackendMarketMessage | null 
   const message = record(value, 'market message');
   if (message.type === 'news') return { type: 'news', item: parseNewsItem(message.item) };
   if (message.type === 'listed') return { type: 'listed', asset: parseAsset(message.asset) };
+  if (message.type === 'asset_updated') return { type: 'asset_updated', asset: parseAsset(message.asset) };
+  if (message.type === 'merged' || message.type === 'delisted') {
+    return { type: message.type, assetId: string(message.asset_id, 'asset ID') };
+  }
   return parseTickMessage(message);
 }
 
@@ -223,6 +250,8 @@ export function applyMarketMessage(
 ): LiveMarketState {
   if (message.type === 'tick') return applyMarketTick(state, message, receivedAt);
   if (message.type === 'listed') return addListedAsset(state, message.asset);
+  if (message.type === 'asset_updated') return updateAssetDetails(state, message.asset);
+  if (message.type !== 'news') return removeAsset(state, message.assetId); // merged or delisted
   const news = mergeNewsItems(state.market.news ?? [], [message.item]);
   if (state.market.news?.length === news.length && news.every((item, index) => item === state.market.news?.[index])) {
     return state;
@@ -247,6 +276,28 @@ export function addListedAsset(state: LiveMarketState, asset: BackendAsset): Liv
     market: { ...state.market, assets: [...state.market.assets, starAsset(asset, points)] },
     pointsByAsset,
   };
+}
+
+/** New spectral type, mass and temperature for a star already listed; its price and history stay. */
+export function updateAssetDetails(state: LiveMarketState, asset: BackendAsset): LiveMarketState {
+  if (!state.pointsByAsset.has(asset.id)) return state;
+  const assets = state.market.assets.map((current) => current.id !== asset.id ? current : {
+    ...current,
+    ...appearance(asset.stage, asset.spectral_type),
+    spectralType: asset.spectral_type,
+    temperature: asset.temperature,
+    mass: asset.mass,
+  });
+  return { ...state, market: { ...state.market, assets } };
+}
+
+/** A star absorbed in a merger, or a delisted black hole, leaves the exchange list. */
+export function removeAsset(state: LiveMarketState, assetId: string): LiveMarketState {
+  if (!state.pointsByAsset.has(assetId)) return state;
+  const pointsByAsset = new Map(state.pointsByAsset);
+  pointsByAsset.delete(assetId);
+  const assets = state.market.assets.filter((asset) => asset.id !== assetId);
+  return { ...state, market: { ...state.market, assets }, pointsByAsset };
 }
 
 /** Ignore duplicate/out-of-order frames so prices and history never move backwards. */
