@@ -71,5 +71,5 @@ class AIWorker:
                 )
                 headline = Headline.model_validate(reply)
             except (GemmaError, TimeoutError, ValidationError) as exc:
-                log.warning("Using the template headline: %s", exc)
+                log.warning("Using the template headline: %r", exc)
         await job.on_ready(headline)

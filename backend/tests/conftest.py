@@ -1,6 +1,7 @@
 import pytest
 
 from app import main
+from app.ai.worker import AIWorker
 
 
 class FakeChatClient:
@@ -19,7 +20,7 @@ class FakeChatClient:
 
 @pytest.fixture(autouse=True)
 def fake_gemma(monkeypatch):
-    """Keep every test away from the real Ollama server."""
+    """Give each test a fresh worker with a fake client, so no test reaches the real Ollama server."""
     fake = FakeChatClient()
-    monkeypatch.setattr(main.worker, "client", fake)
+    monkeypatch.setattr(main, "worker", AIWorker(fake))
     return fake

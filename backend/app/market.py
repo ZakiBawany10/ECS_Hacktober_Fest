@@ -3,6 +3,7 @@ import time
 import uuid
 from collections import deque
 from dataclasses import dataclass, field
+from typing import Literal
 
 from . import config
 from .lifecycle import (
@@ -36,6 +37,8 @@ from .seed import SEED_STARS
 # Tolerance for float comparisons on cash and share quantities.
 EPSILON = 1e-9
 
+NewsKind = Literal["lifecycle", "event", "rumour", "system"]
+
 
 class MarketError(Exception):
     """A request the market rejects, such as a trade the player can't afford."""
@@ -68,6 +71,24 @@ class Star:
 
 
 @dataclass
+class StageChange:
+    asset_id: str
+    old_stage: Stage
+    new_stage: Stage
+    t: int
+
+
+@dataclass
+class News:
+    id: str
+    t: int
+    kind: NewsKind
+    headline: str
+    body: str
+    asset_ids: list[str]
+
+
+@dataclass
 class Player:
     id: str
     nickname: str
@@ -96,6 +117,7 @@ class Market:
         self.stars: dict[str, Star] = {}
         self.players: dict[str, Player] = {}
         self.trades: list[Trade] = []
+        self.news: deque[News] = deque(maxlen=config.NEWS_LENGTH)
         for seed in SEED_STARS:
             L = generate_luminosity(MAIN_SEQUENCE_L_BOUNDS[seed["spectral_type"]], self.rng)
             star = Star(
@@ -168,8 +190,10 @@ class Market:
         star.price = market_price(star.L, star.impact)
         return star
 
-    def advance(self) -> None:
+    def advance(self) -> list[StageChange]:
+        """Move the market on one tick and return the stage changes it caused."""
         self.tick += 1
+        changes: list[StageChange] = []
         for star in self.stars.values():
             if star.ticks_left is not None:
                 star.ticks_left -= 1
@@ -178,6 +202,7 @@ class Market:
                     if stage is None:
                         star.ticks_left = None
                     else:
+                        changes.append(StageChange(star.id, star.stage, stage, self.tick))
                         self._enter_stage(star, stage)
             if star.path:
                 star.L = luminosity_from_price(path_price(star.path, self.tick))
@@ -189,6 +214,20 @@ class Market:
             star.impact = decay_impact(star.impact)
             star.price = market_price(star.L, star.impact)
             star.history.append((self.tick, star.price))
+        return changes
+
+    def add_news(self, kind: NewsKind, headline: str, body: str, asset_ids: list[str], t: int | None = None) -> News:
+        """Publish a news item. t defaults to now; pass the tick an event happened if it was earlier."""
+        news = News(
+            id=uuid.uuid4().hex,
+            t=self.tick if t is None else t,
+            kind=kind,
+            headline=headline,
+            body=body,
+            asset_ids=asset_ids,
+        )
+        self.news.append(news)
+        return news
 
     def join(self, nickname: str) -> Player:
         player = Player(id=uuid.uuid4().hex, nickname=nickname, cash=config.STARTING_CASH)

@@ -1,3 +1,5 @@
+import asyncio
+
 from fastapi.testclient import TestClient
 
 from app import main
@@ -59,3 +61,25 @@ def test_director_force_stage(monkeypatch):
         client.post("/director/force_stage", json={"asset_id": "altra"})
     assert client.post("/director/force_stage", json={"asset_id": "altra"}).status_code == 400
     assert client.post("/director/force_stage", json={"asset_id": "nope"}).status_code == 404
+
+
+def test_stage_change_news_reaches_state(monkeypatch, fake_gemma):
+    monkeypatch.setattr(main, "market", Market())
+    fake_gemma.reply = {"headline": "Altra swells", "body": "Up it goes."}
+    client.post("/director/force_stage", json={"asset_id": "altra"})
+    asyncio.run(main.worker.handle(main.worker.queue.get_nowait()))
+    [news] = client.get("/state").json()["news"]
+    assert news["kind"] == "lifecycle"
+    assert news["asset_ids"] == ["altra"]
+    assert (news["headline"], news["body"]) == ("Altra swells", "Up it goes.")
+    assert "main-sequence star into a blue giant" in fake_gemma.prompts[0]
+
+
+def test_websocket_sends_news(monkeypatch):
+    monkeypatch.setattr(main, "market", Market())
+    with TestClient(app) as live_client, live_client.websocket_connect("/ws") as ws:
+        live_client.post("/director/force_stage", json={"asset_id": "kestrel"})
+        messages = [ws.receive_json() for _ in range(3)]
+        news = next(message for message in messages if message["type"] == "news")
+    assert news["item"]["headline"] == "Fake headline"
+    assert news["item"]["asset_ids"] == ["kestrel"]

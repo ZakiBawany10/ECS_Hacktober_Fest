@@ -6,8 +6,9 @@ from pydantic import BaseModel
 
 from . import config
 from .ai.client import GemmaClient
+from .ai.prompts import Headline
 from .ai.worker import AIWorker
-from .market import Market, MarketError, NotFoundError, Player, Star
+from .market import Market, MarketError, News, NotFoundError, Player, StageChange, Star
 from .models import (
     Asset,
     AssetTick,
@@ -16,6 +17,8 @@ from .models import (
     JoinResponse,
     LeaderboardMessage,
     LeaderboardRow,
+    NewsItem,
+    NewsMessage,
     Portfolio,
     PricePoint,
     StateSnapshot,
@@ -77,10 +80,33 @@ def leaderboard_out() -> list[LeaderboardRow]:
     return [LeaderboardRow(nickname=p.nickname, net_worth=round(worth, 2)) for p, worth in market.leaderboard()]
 
 
+def news_out(news: News) -> NewsItem:
+    return NewsItem(
+        id=news.id,
+        t=news.t,
+        kind=news.kind,
+        headline=news.headline,
+        body=news.body,
+        asset_ids=list(news.asset_ids),
+    )
+
+
+def announce(change: StageChange) -> None:
+    """Ask the worker for a headline about a stage change, and publish it when it's ready."""
+    star = market.get_star(change.asset_id)
+
+    async def publish(headline: Headline) -> None:
+        news = market.add_news("lifecycle", headline.headline, headline.body, [star.id], t=change.t)
+        await connections.broadcast(NewsMessage(item=news_out(news)))
+
+    worker.request_stage_headline(star.name, star.spectral_type, change.old_stage, change.new_stage, publish)
+
+
 async def tick_loop() -> None:
     while True:
         await asyncio.sleep(config.TICK_SECONDS)
-        market.advance()
+        for change in market.advance():
+            announce(change)
         ticks = [AssetTick(id=s.id, stage=s.stage, price=s.price, L=s.L) for s in market.stars.values()]
         await connections.broadcast(TickMessage(t=market.tick, assets=ticks))
         if market.tick % config.LEADERBOARD_EVERY_TICKS == 0:
@@ -119,6 +145,7 @@ async def state() -> StateSnapshot:
         t=market.tick,
         assets=[asset_out(star) for star in market.stars.values()],
         leaderboard=leaderboard_out(),
+        news=[news_out(news) for news in market.news],
     )
 
 
@@ -155,11 +182,13 @@ async def trade(request: TradeRequest) -> Portfolio:
 @app.post("/director/force_stage")
 async def force_stage(request: ForceStageRequest) -> Asset:
     try:
+        old_stage = market.get_star(request.asset_id).stage
         star = market.force_next_stage(request.asset_id)
     except NotFoundError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
     except MarketError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
+    announce(StageChange(star.id, old_stage, star.stage, market.tick))
     return asset_out(star)
 
 

@@ -16,6 +16,7 @@ TWINKLE_REVERSION = 0.05
 
 HISTORY_LENGTH = 600  # price points kept per asset (10 minutes at 1 tick/s)
 LEADERBOARD_EVERY_TICKS = 5
+NEWS_LENGTH = 50  # news items kept for /state, so late joiners can catch up
 
 # Trading pressure: each trade nudges a star's price multiplier, which then decays back to 1.
 # A 10k buy lifts the price by IMPACT_PER_10K (1%), and sells push it down the same way.

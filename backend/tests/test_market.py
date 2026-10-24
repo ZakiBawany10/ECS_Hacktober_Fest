@@ -289,6 +289,29 @@ def test_white_dwarf_declines_linearly_from_giant():
     assert star.price == pytest.approx(target, rel=0.02)
 
 
+def test_advance_reports_stage_changes():
+    market = make_market()
+    assert market.advance() == []
+    star = market.stars["kestrel"]
+    star.ticks_left = 1
+    [change] = market.advance()
+    assert (change.asset_id, change.old_stage, change.new_stage, change.t) == (
+        "kestrel",
+        "main_sequence",
+        "blue_hypergiant",
+        market.tick,
+    )
+
+
+def test_news_keeps_the_latest_items():
+    market = make_market()
+    for i in range(config.NEWS_LENGTH + 5):
+        market.add_news("system", f"Item {i}", "Body.", [])
+    assert len(market.news) == config.NEWS_LENGTH
+    assert market.news[-1].headline == f"Item {config.NEWS_LENGTH + 4}"
+    assert market.add_news("lifecycle", "Old", "Body.", ["kestrel"], t=-3).t == -3
+
+
 def test_seconds_left_starts_star_late_in_life():
     market = make_market()
     assert market.stars["kestrel"].ticks_left == round(40 / config.TICK_SECONDS)

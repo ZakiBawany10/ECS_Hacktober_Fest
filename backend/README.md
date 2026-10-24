@@ -53,7 +53,8 @@ loop. They use structured JSON output with thinking off: on an M5 with 16 GB a
 headline takes about 1.5 s, and the first call after loading takes about 5 s, so
 the worker warms the model up at startup. Each call is retried once. A headline
 Gemma hasn't written within 5 s falls back to a template, so the game works
-without Ollama. Tests use a fake client and don't need Ollama.
+without Ollama. Headlines are written one at a time, so if several stars change
+stage at once, the later ones may get templates. Tests use a fake client and don't need Ollama.
 
 Pricing follows `docs/main_sequence_pricing_data.md`:
 `price = 100 × (log10(L/L☉) + 5)`, with 1000 shares per star.
@@ -111,7 +112,7 @@ the browser.
 | Method | Path | Body | Returns |
 |---|---|---|---|
 | POST | `/join` | `{nickname}` | `{player_id}` |
-| GET | `/state` | | `{t, assets: Asset[], leaderboard: {nickname, net_worth}[]}` |
+| GET | `/state` | | `{t, assets: Asset[], leaderboard: {nickname, net_worth}[], news: NewsItem[]}` |
 | GET | `/assets/{id}/history` | | `{t, price}[]` (last 600 ticks) |
 | GET | `/portfolio/{player_id}` | | `Portfolio` |
 | POST | `/trade` | `{player_id, asset_id, side: "buy"\|"sell", qty}` | `Portfolio` |
@@ -124,7 +125,13 @@ stage     "main_sequence" | "red_giant" | "blue_giant" | "red_hypergiant"
           | "blue_hypergiant" | "supernova" | "white_dwarf" | "neutron_star"
           | "black_hole"
 Portfolio { player_id, nickname, cash, holdings: {asset_id: qty}, net_worth }
+NewsItem  { id, t, kind: "lifecycle" | "event" | "rumour" | "system", headline,
+            body, asset_ids: string[] }
 ```
+
+`news` in `/state` holds the last 50 items, oldest first. `t` is the tick the
+news is about, which can be a tick or two before it was published. Only
+`lifecycle` items exist so far: one per stage change, including forced ones.
 
 Errors use FastAPI's `{"detail": ...}` body: 400 for a rejected trade (not
 enough cash, shares or holdings, or the star is a black hole), 404 for an unknown player/asset, 422 for an
@@ -145,13 +152,16 @@ curl -X POST localhost:8000/director/force_stage -H 'Content-Type: application/j
 ```json
 {"type": "tick", "t": 12, "assets": [{"id": "sol-nova", "stage": "main_sequence", "price": 500.4, "L": 1.002}]}
 {"type": "leaderboard", "rows": [{"nickname": "zaki", "net_worth": 10012.5}]}
+{"type": "news", "item": {"id": "…", "t": 41, "kind": "lifecycle", "headline": "Kestrel goes supernova", "body": "…", "asset_ids": ["kestrel"]}}
 ```
 
-`tick` is sent every tick and `leaderboard` every 5 ticks. Load `/state` once on
-start, then apply `tick` messages on top.
+`tick` is sent every tick and `leaderboard` every 5 ticks. `news` is sent when
+an item is published, usually about 1.5 s after the stage change (Gemma's
+writing time), and at most 5 s after it. Load `/state` once on start, then apply
+messages on top.
 
 ## Not built yet
 
-Nebulae and protostars, random events, news feed, more director
-endpoints, Gemma integration and persistence. State resets when the server
+Nebulae and protostars, random events and rumours, more director endpoints
+and persistence. State resets when the server
 restarts.

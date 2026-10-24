@@ -5,6 +5,7 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, Field, StringConstraints
 
 from .lifecycle import Stage
+from .market import NewsKind
 
 Nickname = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=20)]
 
@@ -67,10 +68,20 @@ class PricePoint(BaseModel):
     price: float
 
 
+class NewsItem(BaseModel):
+    id: str
+    t: int  # tick the news is about
+    kind: NewsKind
+    headline: str
+    body: str
+    asset_ids: list[str]
+
+
 class StateSnapshot(BaseModel):
     t: int
     assets: list[Asset]
     leaderboard: list[LeaderboardRow]
+    news: list[NewsItem]  # the last 50 items, oldest first
 
 
 class TickMessage(BaseModel):
@@ -82,3 +93,8 @@ class TickMessage(BaseModel):
 class LeaderboardMessage(BaseModel):
     type: Literal["leaderboard"] = "leaderboard"
     rows: list[LeaderboardRow]
+
+
+class NewsMessage(BaseModel):
+    type: Literal["news"] = "news"
+    item: NewsItem
