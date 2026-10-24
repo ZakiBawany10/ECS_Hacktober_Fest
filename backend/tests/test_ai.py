@@ -14,6 +14,7 @@ from app.ai.prompts import (
     STAGE_LABELS,
     STAGE_NOTES,
     Headline,
+    discovery_news,
     event_fallback,
     event_prompt,
     stage_change_fallback,
@@ -179,3 +180,12 @@ def test_each_headline_comes_from_an_outlet_in_its_voice():
     assert outlets == [OUTLETS[3]] and OUTLETS[3].side == "alien"
     assert "You are Zr'kth Construction Authority, an alien news outlet" in client.systems[0]
     assert {outlet.side for outlet in OUTLETS} == {"human", "alien"}
+
+
+def test_discovery_news_describes_the_forecast_star():
+    sunlike = discovery_news("Wren", "G")
+    assert sunlike.headline == "New protostar Wren forecast to become a yellow, Sun-like type G star"
+    assert "ignite in 60–90 seconds" in sunlike.body
+    assert "shine for 10–15 minutes, then swell into a red giant and end as a white dwarf" in sunlike.body
+    blue = discovery_news("Wren", "O")
+    assert "3–5 minutes, then swell into a blue hypergiant, explode as a supernova and end as a black hole" in blue.body

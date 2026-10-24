@@ -10,6 +10,7 @@ from .ai.prompts import (
     SPECTRAL_LOOKS,
     Headline,
     Outlet,
+    discovery_news,
     event_fallback,
     event_prompt,
     star_news_fallback,
@@ -149,11 +150,16 @@ def projection(star: Star) -> str:
     return SPECTRAL_LOOKS[public_profile(star)[0]]
 
 
+# Discovery news is the forecast, stated plainly, so it comes from the outlet that reports accurately.
+DISCOVERY_OUTLET = OUTLETS_BY_NAME["Orbital Observatory Bulletin"]
+
+
 async def announce_spawn(star: Star) -> None:
+    """List a new star and publish its discovery story straight after: code writes it, so it never waits for
+    Gemma."""
     await connections.broadcast(ListedMessage(asset=asset_out(star)))
-    facts = {"name": star.name, "projection": projection(star)}
     publish = publisher("lifecycle", [star.id], market.tick)
-    worker.request_headline(star_news_prompt("discovery", facts), star_news_fallback("discovery", facts), publish)
+    await publish(discovery_news(star.name, public_profile(star)[0]), DISCOVERY_OUTLET)
 
 
 def announce_forecast(star: Star) -> None:

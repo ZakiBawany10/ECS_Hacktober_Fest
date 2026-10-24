@@ -6,7 +6,7 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, StringConstraints
 
 from ..events import EventType
-from ..lifecycle import STAGE_LABELS, Stage
+from ..lifecycle import LIFECYCLE_PATHS, REMNANT_STAGES, STAGE_LABELS, Stage, stage_seconds
 from ..newsroom import OUTLETS, Outlet
 
 SYSTEM = (
@@ -259,8 +259,9 @@ def stage_change_fallback(name: str, new_stage: Stage, note: str = "") -> Headli
     return Headline(headline=headline.format(**facts), body=body.format(**facts).strip())
 
 
-# News about a star outside its stage changes: from discovery as a protostar to delisting as a black hole.
-StarNews = Literal["discovery", "forecast", "delisted"]
+# News about a star outside its stage changes: a protostar's forecast update and a black hole's delisting.
+# Discovery news is written by code instead (discovery_news), so it can go out with the new star.
+StarNews = Literal["forecast", "delisted"]
 
 SPECTRAL_LOOKS = {
     "O": "a huge, hot blue type O star",
@@ -273,11 +274,6 @@ SPECTRAL_LOOKS = {
 }
 
 STAR_NEWS_NOTES: dict[StarNews, str] = {
-    "discovery": (
-        "Astronomers have spotted {name}, a new protostar: a collapsing cloud of gas that hasn't started "
-        "fusing yet. Forecasters project it will become {projection}. Forecasts this early can be badly wrong, "
-        "and its true value is only revealed when it ignites. Traders can buy in now at the forecast price."
-    ),
     "forecast": (
         "Forecasters have updated their projection for {name}, a protostar still gathering gas: they now "
         "expect {projection}, {revision}. It will ignite and reveal its true value soon."
@@ -289,7 +285,6 @@ STAR_NEWS_NOTES: dict[StarNews, str] = {
 }
 
 STAR_NEWS_FALLBACKS: dict[StarNews, tuple[str, str]] = {
-    "discovery": ("New protostar {name} spotted", "Forecasters expect {name} to become {projection}."),
     "forecast": ("Forecast updated for {name}", "Forecasters now expect {projection}, {revision}."),
     "delisted": ("{name} delisted", "{name}'s worthless black hole shares have been written off."),
 }
@@ -338,3 +333,26 @@ def star_news_prompt(kind: StarNews, facts: dict[str, str]) -> str:
 def star_news_fallback(kind: StarNews, facts: dict[str, str]) -> Headline:
     headline, body = STAR_NEWS_FALLBACKS[kind]
     return Headline(headline=headline.format(**facts), body=body.format(**facts))
+
+
+def _fate_step(stage: Stage) -> str:
+    if stage == "supernova":
+        return "explode as a supernova"
+    return f"{'end as' if stage in REMNANT_STAGES else 'swell into'} a {STAGE_LABELS[stage]}"
+
+
+def discovery_news(name: str, spectral_type: str) -> Headline:
+    """A new protostar's story, from the spectral type its forecast suggests: what it should become, how
+    long stars like that shine and how they end. Like the outlets, it quotes no prices."""
+    ignite_low, ignite_high = stage_seconds("protostar", spectral_type)
+    shine_low, shine_high = stage_seconds("main_sequence", spectral_type)
+    *steps, last = [_fate_step(stage) for stage in LIFECYCLE_PATHS[spectral_type][2:]]  # after the main sequence
+    fate = f"{', '.join(steps)} and {last}" if steps else last
+    return Headline(
+        headline=f"New protostar {name} forecast to become {SPECTRAL_LOOKS[spectral_type]}",
+        body=(
+            f"{name} is still a collapsing cloud of gas and should ignite in {ignite_low:.0f}–{ignite_high:.0f} "
+            f"seconds. Stars like that usually shine for {shine_low / 60:.0f}–{shine_high / 60:.0f} minutes, "
+            f"then {fate}. Early forecasts can be badly wrong: its true value is only revealed at ignition."
+        ),
+    )

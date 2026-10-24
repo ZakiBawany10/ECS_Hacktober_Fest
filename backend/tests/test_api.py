@@ -121,13 +121,16 @@ def test_director_spawn_star_lists_and_announces(monkeypatch, fake_gemma):
         response = live_client.post("/director/spawn_star", json={"spectral_type": "M"})
         assert response.status_code == 200
         asset = response.json()
+        story = main.market.news[-1]  # published before the response: no wait for Gemma
         messages = [ws.receive_json() for _ in range(3)]
     assert asset["stage"] == "protostar"
     listed = next(m for m in messages if m["type"] == "listed")
     assert listed["asset"]["id"] == asset["id"]
     news = next(m for m in messages if m["type"] == "news")
-    assert news["item"]["asset_ids"] == [asset["id"]]
-    assert any("new protostar" in prompt for prompt in fake_gemma.prompts)
+    assert news["item"]["id"] == story.id and news["item"]["asset_ids"] == [asset["id"]]
+    assert f"type {asset['spectral_type']}" in story.headline  # the forecast type players see
+    assert story.source == "Orbital Observatory Bulletin"
+    assert not any("protostar" in prompt for prompt in fake_gemma.prompts)
     assert client.post("/director/spawn_star", json={"spectral_type": "X"}).status_code == 422
 
 

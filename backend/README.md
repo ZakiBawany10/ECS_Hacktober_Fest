@@ -99,7 +99,10 @@ of its main-sequence price, which wobbles and narrows towards ignition but is
 Players can trade protostars at the forecast price. The API shows a protostar's
 *projected* spectral type, mass and temperature, so it can change, and the true
 values appear at ignition. Protostars get news when they're discovered,
-halfway to ignition and at ignition.
+halfway to ignition and at ignition. The discovery story goes out with the
+`listed` message: code writes it from the projected type (when it should ignite,
+how long stars like that shine and how they end), so it never waits for Gemma.
+It's credited to the Orbital Observatory Bulletin.
 
 **Black holes** are delisted 60 s after forming: they come off the exchange and
 their shares are written off, but they stay in `/state` and tick messages with
@@ -293,7 +296,8 @@ its holders were cashed out. `partner_id` picks the second star for
 
 `tick` is sent every tick and `leaderboard` every 5 ticks. `news` is sent when
 an item is published, usually about 1.5 s after the stage change (Gemma's
-writing time), and at most 5 s after it. Load `/state` once on start, then apply
+writing time), and at most 5 s after it. A new star's discovery story comes
+straight after its `listed` message. Load `/state` once on start, then apply
 messages on top.
 
 ## Not built yet
