@@ -14,8 +14,26 @@
 .trade-quantity input { width: 100%; min-height: 40px; padding: 9px 11px; border: 1px solid #394b33; border-radius: 5px; background: #0e150f; color: #e2eedb; font-family: var(--mono); font-size: 12px; }
 .trade-quantity input::placeholder { color: #7e9275; font-size: 11px; }
 .trade-quantity input:disabled { opacity: .5; }
+.trade-quantity input[aria-invalid='true'] { border-color: var(--down); }
+.trade-buy-shortcuts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-top: 8px; }
+.trade-buy-shortcuts button { min-height: 32px; padding: 6px; border: 1px solid #394b33; border-radius: 4px; background: #152016; color: #bdceb4; font-family: var(--mono); font-size: 11px; }
+.trade-buy-shortcuts button[aria-pressed='true'] { border-color: var(--accent); background: #293a25; color: var(--accent); }
+.trade-buy-shortcuts button:enabled:hover { border-color: var(--accent); }
+.trade-buy-shortcuts button:disabled { opacity: .45; }
+.trade-range-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: 10px; color: #c5d2bd; }
+.trade-range-heading output { color: var(--down); font-family: var(--mono); font-size: 14px; overflow-wrap: anywhere; }
+.trade-sell-range input { display: block; width: 100%; min-height: 32px; margin: 7px 0; padding: 0; accent-color: var(--down); cursor: pointer; }
+.trade-sell-range input:focus-visible { outline-offset: 0; }
+.trade-sell-range input:disabled { opacity: .45; cursor: default; }
+.trade-range-bounds { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 9px; }
+.trade-range-bounds span:last-child { text-align: right; overflow-wrap: anywhere; }
+.trade-quantity-mode { min-height: 30px; margin-top: 5px; padding: 5px 0; border: 0; background: transparent; color: #b7c9ad; font-size: 9px; text-decoration: underline; text-underline-offset: 3px; }
+.trade-quantity-mode:enabled:hover { color: #e2eedb; }
+.trade-quantity-mode:disabled { opacity: .45; }
+.trade-fraction-note { margin-top: 8px; color: var(--muted); font-size: 9px; line-height: 1.7; }
 .trade-estimate { margin-top: 15px; }
 .trade-estimate > div { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.trade-estimate > div + div { margin-top: 8px; }
 .trade-estimate dt { font-size: 10px; color: var(--muted); }
 .trade-estimate dd { margin: 0; text-align: right; color: #d7e6cc; font-family: var(--mono); font-size: 12px; overflow-wrap: anywhere; }
 .trade-estimate-note { margin-top: 9px; color: #8e9f85; font-size: 9px; line-height: 1.7; }

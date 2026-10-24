@@ -4,7 +4,7 @@ import { mergeNewsItems, parseNewsItem, parseNewsSnapshot } from './news.ts';
 import type { MarketView, NewsHeadline, StarAsset, StarCategory } from './types.ts';
 
 const stages = {
-  protostar: { label: 'Protostar', category: 'Nebula' },
+  protostar: { label: 'Protostar', category: 'Protostar' },
   main_sequence: { label: 'Main sequence', category: 'Main sequence' },
   red_giant: { label: 'Red giant', category: 'Giant', color: '#fb9277' },
   blue_giant: { label: 'Blue giant', category: 'Giant', color: '#a8c6ff' },

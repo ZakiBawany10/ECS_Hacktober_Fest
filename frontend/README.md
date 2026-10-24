@@ -35,6 +35,16 @@ net worth and holdings. The browser remembers the player ID; a server restart
 clears that session after the server reports the player is missing. Balances
 refresh every five seconds and after joining, trading or reconnecting.
 
+Buy orders have quantity shortcuts for 1, 5, 10 and 25 shares alongside typed
+entry. Sell orders use a slider from 1 share to the selected star's current
+holding, including a fractional maximum. Manual entry remains available for
+fractional sales; holdings below 1 share use it automatically. Choosing a
+quantity does not submit an order.
+Buy shortcuts and submission are disabled when the latest quote already exceeds
+available cash. A quote that fits can still be rejected if execution-price
+impact or a later tick pushes the final cost higher. Rejected orders retain the
+current portfolio and allow the player to choose a smaller quantity and retry.
+
 Order estimates use the latest displayed price. Trading pressure changes the
 execution price, so the server validates each order and returns the updated
 portfolio. The current API does not return an execution receipt. Black-hole

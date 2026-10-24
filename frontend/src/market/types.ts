@@ -8,7 +8,7 @@ export interface Candle {
   volume?: number;
 }
 
-export type StarCategory = 'Main sequence' | 'Giant' | 'Remnant' | 'Nebula';
+export type StarCategory = 'Protostar' | 'Main sequence' | 'Giant' | 'Remnant' | 'Nebula';
 
 export interface StarAsset {
   id: string;

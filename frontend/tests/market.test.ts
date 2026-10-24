@@ -85,6 +85,7 @@ test('every backend lifecycle stage works in snapshots and live tick updates', (
     const initial = createMarketState(parsed).market.assets[0];
     assert.equal(initial.stage, stage);
     assert.equal(initial.classification, expectedLabel);
+    if (stage === 'protostar') assert.equal(initial.category, 'Protostar');
     assert.match(initial.color, /^#[0-9a-f]{6}$/i);
 
     live = applyMarketTick(live, update(11 + index, 510 + index, stage));

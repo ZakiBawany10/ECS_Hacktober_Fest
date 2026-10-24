@@ -305,6 +305,39 @@ test('a rejected order preserves current balances; missing-player orders verify 
   assert.equal(loadPlayerId(saved), undefined);
 });
 
+test('an HTTP cash rejection leaves the account usable for a subsequent affordable buy', async () => {
+  const requests: unknown[] = [];
+  const initial = portfolio();
+  const filled = portfolio(949.99, 0.5);
+  const client = createPlayerApi({ fetch: async (url, init) => {
+    assert.equal(String(url), '/trade');
+    requests.push(JSON.parse(String(init?.body)));
+    return requests.length === 1
+      ? Response.json({ detail: 'Not enough cash: the final execution cost is 1,010.00' }, { status: 400 })
+      : Response.json(filled);
+  } });
+  const { controller } = await restored({ trade: client.trade });
+
+  assert.equal(await controller.trade('star-1', 'buy', 10), false);
+  const rejected = controller.getSnapshot();
+  assert.deepEqual(rejected.portfolio, initial);
+  assert.equal(rejected.busy, null);
+  assert.equal(rejected.stale, false);
+  assert.match(rejected.error ?? '', /Not enough cash/);
+  assert.equal(requests.length, 1, 'A rejected order must not be retried automatically.');
+
+  assert.equal(await controller.trade('star-1', 'buy', 0.5), true);
+  const recovered = controller.getSnapshot();
+  assert.deepEqual(recovered.portfolio, filled);
+  assert.equal(recovered.busy, null);
+  assert.equal(recovered.stale, false);
+  assert.equal(recovered.error, null);
+  assert.deepEqual(requests, [
+    { player_id: 'player-1', asset_id: 'star-1', side: 'buy', qty: 10 },
+    { player_id: 'player-1', asset_id: 'star-1', side: 'buy', qty: 0.5 },
+  ]);
+});
+
 test('polls share a slow portfolio request instead of repeatedly cancelling it', async () => {
   const response = deferred<Portfolio>();
   let requests = 0;

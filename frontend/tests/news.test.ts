@@ -42,8 +42,8 @@ test('news maps real event ticks, categories and all related assets without fabr
 });
 
 test('every declared backend news kind is supported and unrelated socket messages stay ignored', () => {
-  const marketSource = readFileSync(new URL('../../backend/app/market.py', import.meta.url), 'utf8');
-  const literal = marketSource.match(/^NewsKind\s*=\s*Literal\[([\s\S]*?)\]/m);
+  const newsroomSource = readFileSync(new URL('../../backend/app/newsroom.py', import.meta.url), 'utf8');
+  const literal = newsroomSource.match(/^NewsKind\s*=\s*Literal\[([\s\S]*?)\]/m);
   assert.ok(literal, 'Backend must declare its NewsKind literal.');
   const kinds = [...literal[1].matchAll(/["']([^"']+)["']/g)].map((match) => match[1]);
   assert.ok(kinds.length > 0);
