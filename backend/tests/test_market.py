@@ -13,13 +13,16 @@ from app.lifecycle import (
     SUPERNOVA_DROP_SECONDS,
     SUPERNOVA_GLOW_SECONDS,
     generate_luminosity,
+    luminosity_for_mass,
     next_stage,
     seconds_to_ticks,
+    type_for_mass,
 )
 from app.events import MAJOR_TYPES, MOMENTS, eligible, star_weight
 from app.events.rumour import create_signal
 from app.market import Market, MarketError, NotFoundError
 from app.pricing import apply_impact, luminosity_from_price, market_price, price_from_luminosity, twinkle
+from app.spawn import FALLBACK_NAMES, name_key
 
 
 def test_price_follows_log_luminosity():
@@ -476,6 +479,22 @@ def test_spawned_names_and_ids_are_unique():
     assert len({star.id for star in market.stars.values()}) == len(market.stars)
 
 
+def test_a_gone_star_name_is_never_reused():
+    market = make_market()
+    gone = market.spawn_star()
+    del market.stars[gone.id]  # as when a star merges into another
+    market.name_pool.extend([gone.name, gone.name.upper(), "Sol-Nova", "Wisp"])
+    assert market.spawn_star().name == "Wisp"  # Sol-Nova counts as the seeded Sol Nova
+    assert gone.name not in [market.spawn_star().name for _ in range(len(FALLBACK_NAMES))]
+
+
+def test_names_stay_unique_after_the_fallbacks_run_out():
+    market = make_market()
+    names = [market.spawn_star().name for _ in range(len(FALLBACK_NAMES) + 3)]  # all in the same tick
+    assert names[-1].startswith("Nova")
+    assert len({name_key(name) for name in names}) == len(names)
+
+
 def test_spawning_stops_at_the_living_star_limit():
     market = Market(rng=random.Random(2))
     for _ in range(3000):
@@ -738,3 +757,83 @@ def test_false_alien_signal_changes_nothing_and_is_debunked():
     assert "a hoax" in start.facts["secret"]  # for Gemma only: facts never reach clients
     assert moments == [("debunked", "rumour", True)]
     assert set(multipliers) == {1.0}
+
+
+def run_event(market: Market, event, ticks: int = 2000) -> list[tuple[str, str]]:
+    moments = []
+    while event.id in market.events and ticks:
+        moments += [(n.moment, ",".join(n.asset_ids)) for n in market.advance().event_news]
+        ticks -= 1
+    return moments
+
+
+def test_type_follows_mass():
+    assert [type_for_mass(m) for m in (0.3, 1.0, 1.3, 2.0, 2.4, 10, 80)] == ["M", "G", "F", "A", "A", "B", "O"]
+    low, high = MAIN_SEQUENCE_L_BOUNDS["G"]
+    assert luminosity_for_mass("G", 0.90) == pytest.approx(low)
+    assert luminosity_for_mass("G", 2.0) == pytest.approx(high)
+
+
+def test_merger_absorbs_the_smaller_star_and_upgrades_the_survivor():
+    market = make_market()
+    player = market.join("zaki")
+    market.trade(player.id, "kora", "buy", 2)  # K, 0.75 M☉: the smaller star
+    market.trade(player.id, "sol-nova", "buy", 1)  # G, 1.0 M☉: survives
+    for _ in range(30):
+        market.advance()  # let the trading pressure fade
+    merger = market.start_event("star_merger", "sol-nova", director=True, partner_id="kora")
+    merger.merges = True
+    sol, kora_price = market.stars["sol-nova"], None
+    while merger.id in market.events:
+        kora_price = market.stars["kora"].price
+        report = market.advance()
+    assert "kora" not in market.stars and report.merged == [("kora", "sol-nova")]
+    assert sol in report.updated
+    assert sol.spectral_type == "A" and sol.mass == pytest.approx(1.75)  # 1.75 M☉: type A
+    low, high = MAIN_SEQUENCE_L_BOUNDS["A"]
+    assert low * 1.5 <= sol.L * 1.001 and sol.base_L <= high * 1.5
+    assert player.holdings == {"sol-nova": 1}
+    assert player.cash > config.STARTING_CASH - 3 * 1000  # kora shares were cashed out, not lost
+    assert sol.ticks_left is not None and next_stage("main_sequence", "A") == "blue_giant"
+
+
+def test_merger_near_miss_leaves_both_stars():
+    market = make_market()
+    merger = market.start_event("star_merger", "sol-nova", director=True, partner_id="kora")
+    merger.merges = False
+    moments = [m for m, _ in run_event(market, merger)]
+    assert moments == ["start", "update", "update", "near_miss"]
+    assert {"sol-nova", "kora"} <= set(market.stars)
+    assert market.stars["sol-nova"].multipliers == {} and market.stars["kora"].multipliers == {}
+
+
+def test_mass_transfer_shrinks_the_donor_and_grows_the_gainer_up_a_type():
+    market = make_market()
+    market.force_next_stage("kora")  # K → red giant: the donor
+    donor, gainer = market.stars["kora"], market.stars["sol-nova"]
+    donor.ticks_left = 10_000
+    gainer.mass = 1.05  # near the top of type G, so the gas pushes it into F
+    transfer = market.start_event("mass_transfer", "kora", director=True, partner_id="sol-nova")
+    transfer.fraction = 0.3
+    moments = []
+    while not transfer.finished:
+        moments += [n.moment for n in market.advance().event_news]
+    assert "retyped" in moments and moments[-1] == "ended"
+    assert gainer.spectral_type == "F" and gainer.mass == pytest.approx(1.05 + 0.3 * 0.75)
+    assert donor.mass == pytest.approx(0.7 * 0.75)
+    for _ in range(20):
+        market.advance()
+    assert donor.event_multiplier == pytest.approx(1 - 0.85 * 0.3, abs=0.01)  # the doc's −25%
+    assert transfer.id in market.events and not transfer.counts_towards_cap
+    market.force_next_stage("kora")  # a new stage: the loss goes with the old one
+    market.advance()
+    assert transfer.id not in market.events and donor.multipliers == {}
+
+
+def test_two_star_events_need_a_partner():
+    market = make_market()
+    assert not eligible("mass_transfer", market.stars["kora"], market)  # not a red giant
+    with pytest.raises(MarketError):
+        market.start_event("star_merger", "sol-nova", director=True, partner_id="sol-nova")
+    market.force_next_stage("altra")  # a blue giant, so not main sequence
+    assert not eligible("star_merger", market.stars["sol-nova"], market, partner=market.stars["altra"])

@@ -6,33 +6,14 @@ ignition the price jumps to the true value.
 """
 
 import random
+import re
 from dataclasses import dataclass
 
-from .lifecycle import MAIN_SEQUENCE_L_BOUNDS
+from .lifecycle import MAIN_SEQUENCE_L_BOUNDS, MAIN_SEQUENCE_MASS_BOUNDS, MAIN_SEQUENCE_TEMPERATURE_BOUNDS
 from .pricing import price_from_luminosity
 
 # Every spectral type is equally likely (real galaxies are mostly M stars, which makes a dull market).
 SPAWN_TYPES = "OBAFGKM"
-
-# Display-only birth values by spectral type, from Table 1 of docs/main_sequence_pricing_data.md.
-MAIN_SEQUENCE_TEMPERATURE_BOUNDS: dict[str, tuple[float, float]] = {
-    "O": (32_000, 45_000),
-    "B": (10_000, 31_000),
-    "A": (7_400, 9_700),
-    "F": (6_000, 7_200),
-    "G": (5_400, 5_900),
-    "K": (3_900, 5_300),
-    "M": (2_400, 3_900),
-}
-MAIN_SEQUENCE_MASS_BOUNDS: dict[str, tuple[float, float]] = {
-    "O": (19, 60),
-    "B": (2.7, 18),
-    "A": (1.75, 2.2),
-    "F": (1.1, 1.6),
-    "G": (0.90, 1.06),
-    "K": (0.59, 0.88),
-    "M": (0.08, 0.57),
-}
 
 # How wrong a forecast is at ignition: usually close, sometimes way off in either direction.
 FORECAST_CLOSE_CHANCE = 0.7
@@ -47,6 +28,11 @@ FALLBACK_NAMES = [
     "Wren", "Cinder", "Obelus", "Fathom", "Ivory Gate", "Sable", "Kittiwake", "Morrow", "Brine", "Ostara",
     "Thistle", "Calder", "Nimbus", "Gloam", "Juniper", "Rook", "Solace", "Tamsin", "Umber", "Zephyr",
 ]
+
+
+def name_key(name: str) -> str:
+    """What two star names must not share: "Ivory Gate", "ivory-gate" and "IvoryGate" are the same name."""
+    return re.sub(r"[^a-z0-9]", "", name.lower())
 
 
 @dataclass

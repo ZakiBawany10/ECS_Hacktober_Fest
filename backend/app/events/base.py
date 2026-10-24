@@ -19,6 +19,8 @@ EventType = Literal[
     "dyson_sphere",
     "intelligent_life",
     "alien_signal",
+    "star_merger",
+    "mass_transfer",
 ]
 
 # A multiplier this close to its target has finished easing.
@@ -69,6 +71,18 @@ class Event:
     @property
     def counts_towards_cap(self) -> bool:
         return self.major
+
+    @property
+    def asset_ids(self) -> list[str]:
+        """Every star the event involves."""
+        return [self.asset_id]
+
+    def cancel(self, market: "Market") -> None:
+        """Remove the event's price effects, when a star it involves leaves the market."""
+        for asset_id in self.asset_ids:
+            star = market.stars.get(asset_id)
+            if star is not None:
+                star.multipliers.pop(self.id, None)
 
     def start(self, market: "Market") -> None:
         pass

@@ -45,6 +45,28 @@ MAIN_SEQUENCE_L_BOUNDS: dict[str, tuple[float, float]] = {
 }
 
 
+# Main-sequence temperature (K) and mass (M☉) by spectral type, also from Table 1. Temperature is
+# display only; mass decides what a merger or mass transfer turns a star into.
+MAIN_SEQUENCE_TEMPERATURE_BOUNDS: dict[str, tuple[float, float]] = {
+    "O": (32_000, 45_000),
+    "B": (10_000, 31_000),
+    "A": (7_400, 9_700),
+    "F": (6_000, 7_200),
+    "G": (5_400, 5_900),
+    "K": (3_900, 5_300),
+    "M": (2_400, 3_900),
+}
+MAIN_SEQUENCE_MASS_BOUNDS: dict[str, tuple[float, float]] = {
+    "O": (19, 60),
+    "B": (2.7, 18),
+    "A": (1.75, 2.2),
+    "F": (1.1, 1.6),
+    "G": (0.90, 1.06),
+    "K": (0.59, 0.88),
+    "M": (0.08, 0.57),
+}
+
+
 def _from_shifted_log(low: float, high: float) -> tuple[float, float]:
     """L/L☉ bounds from the doc's log10(L/L☉) + 5 values, which are price / 100."""
     offset = config.LOG_LUMINOSITY_OFFSET
@@ -148,3 +170,21 @@ def roll_duration_ticks(stage: Stage, spectral_type: str, rng: random.Random) ->
     if seconds is None:
         return None
     return seconds_to_ticks(rng.uniform(*seconds))
+
+
+def type_for_mass(mass: float) -> str:
+    """The spectral type whose main-sequence mass range holds this mass, or the nearest one."""
+
+    def distance(spectral_type: str) -> float:
+        low, high = MAIN_SEQUENCE_MASS_BOUNDS[spectral_type]
+        return max(low - mass, 0.0, mass - high)
+
+    return min(MAIN_SEQUENCE_MASS_BOUNDS, key=distance)
+
+
+def luminosity_for_mass(spectral_type: str, mass: float) -> float:
+    """Where a mass sits in its type's mass range, mapped to the same place in its L range (in log L)."""
+    low_m, high_m = MAIN_SEQUENCE_MASS_BOUNDS[spectral_type]
+    low_L, high_L = MAIN_SEQUENCE_L_BOUNDS[spectral_type]
+    position = min(max((mass - low_m) / (high_m - low_m), 0.0), 1.0)
+    return 10 ** (math.log10(low_L) + position * (math.log10(high_L) - math.log10(low_L)))

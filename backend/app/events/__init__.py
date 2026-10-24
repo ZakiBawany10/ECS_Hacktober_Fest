@@ -12,6 +12,8 @@ from .base import EasingEvent, Event, EventNews, EventType, Multiplier
 from .civ import civilisation_on, create_civilisation, life_eligible
 from .dimming import MAX_DIMMING, create_dimming, dimming_eligible
 from .dyson import create_dyson, dyson_eligible
+from .mass_transfer import MAX_TRANSFERS, create_transfer, donor_eligible, gainers
+from .merger import MAX_MERGERS, create_merger, merger_eligible, merger_partners
 from .minor import create_minor, minor_eligible
 from .rumour import create_signal
 
@@ -44,11 +46,13 @@ EVENT_WEIGHTS: dict[EventType, float] = {
     "dyson_sphere": 4,
     "intelligent_life": 8,
     "alien_signal": 8,  # the doc gives no weight
+    "star_merger": 8,
+    "mass_transfer": 10,
 }
 DYSON_CIV_WEIGHT = 5  # a spacefaring civilisation's star is this much likelier to get a Dyson sphere
 
 # Major events: at most MAX_MAJOR_EVENTS at once across the market, and one per star.
-MAJOR_TYPES: set[EventType] = {"mysterious_dimming", "dyson_sphere"}
+MAJOR_TYPES: set[EventType] = {"mysterious_dimming", "dyson_sphere", "star_merger", "mass_transfer"}
 MAX_MAJOR_EVENTS = 4
 
 # The news moments each event can report. Every one needs a note and a fallback in app/ai/prompts.py.
@@ -60,11 +64,25 @@ MOMENTS: dict[EventType, set[str]] = {
     "dyson_sphere": {"start", "update", "stall", "abandoned", "complete", "destroyed"},
     "intelligent_life": {"start", "level_up", "silent", "sterilised", "migrated", "extinct"},
     "alien_signal": {"start", "confirmed", "debunked"},
+    "star_merger": {"start", "update", "merged", "near_miss", "called_off"},
+    "mass_transfer": {"start", "update", "retyped", "ended"},
 }
 
 
-def eligible(event_type: EventType, star: "Star", market: "Market", director: bool = False) -> bool:
-    """Whether the event can start on this star now. The director skips the market-wide limits."""
+def partners(event_type: EventType, star: "Star", market: "Market") -> list["Star"]:
+    """The stars a two-star event could pair this one with."""
+    if event_type == "star_merger":
+        return merger_partners(star, market)
+    if event_type == "mass_transfer":
+        return gainers(star, market)
+    return []
+
+
+def eligible(
+    event_type: EventType, star: "Star", market: "Market", director: bool = False, partner: "Star | None" = None
+) -> bool:
+    """Whether the event can start on this star now (with this partner, for two-star events). The
+    director skips the market-wide limits."""
     if not star.listed or star.stage in DARK_STAGES or star.stage == "protostar":
         return False
     if event_type in MAJOR_TYPES:
@@ -80,6 +98,12 @@ def eligible(event_type: EventType, star: "Star", market: "Market", director: bo
         return life_eligible(star, market)
     if event_type == "alien_signal":
         return not any(e.type == "alien_signal" and e.asset_id == star.id for e in market.events.values())
+    if event_type in ("star_merger", "mass_transfer"):
+        fits = merger_eligible(star) if event_type == "star_merger" else donor_eligible(star)
+        limit = MAX_MERGERS if event_type == "star_merger" else MAX_TRANSFERS
+        options = partners(event_type, star, market)
+        paired = partner in options if partner else bool(options)
+        return fits and paired and (director or market.event_count(event_type) < limit)
     return minor_eligible(event_type, star)
 
 
@@ -91,8 +115,12 @@ def star_weight(event_type: EventType, star: "Star", market: "Market") -> float:
     return 1
 
 
-def create_event(event_type: EventType, star: "Star", market: "Market") -> Event:
+def create_event(event_type: EventType, star: "Star", market: "Market", partner: "Star | None" = None) -> Event:
     """Roll a new event's numbers and hidden outcome. The caller checks eligibility and calls start()."""
+    if event_type in ("star_merger", "mass_transfer"):
+        partner = partner or market.rng.choice(partners(event_type, star, market))
+        create = create_merger if event_type == "star_merger" else create_transfer
+        return create(star, partner, market.tick, market.rng)
     if event_type == "dyson_sphere":
         return create_dyson(star, market.tick, market.rng)
     if event_type == "mysterious_dimming":

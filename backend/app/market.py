@@ -25,6 +25,8 @@ from .lifecycle import (
     DECLINE_SECONDS,
     DECLINE_STAGES,
     MAIN_SEQUENCE_L_BOUNDS,
+    MAIN_SEQUENCE_MASS_BOUNDS,
+    MAIN_SEQUENCE_TEMPERATURE_BOUNDS,
     REMNANT_STAGES,
     STAGE_L_BOUNDS,
     SUPERNOVA_DROP_SECONDS,
@@ -33,9 +35,11 @@ from .lifecycle import (
     SUPERNOVA_PEAK,
     Stage,
     generate_luminosity,
+    luminosity_for_mass,
     next_stage,
     roll_duration_ticks,
     seconds_to_ticks,
+    type_for_mass,
 )
 from .newsroom import NewsKind, Side
 from .pricing import (
@@ -51,11 +55,10 @@ from .pricing import (
 from .seed import SEED_STARS
 from .spawn import (
     FALLBACK_NAMES,
-    MAIN_SEQUENCE_MASS_BOUNDS,
-    MAIN_SEQUENCE_TEMPERATURE_BOUNDS,
     SPAWN_TYPES,
     Forecast,
     ignition_note,
+    name_key,
     roll_forecast,
 )
 
@@ -125,6 +128,8 @@ class TickReport:
     spawned: list[Star] = field(default_factory=list)
     forecast_updates: list[Star] = field(default_factory=list)  # protostars halfway to ignition
     delisted: list[Star] = field(default_factory=list)
+    updated: list[Star] = field(default_factory=list)  # spectral type, mass or temperature changed
+    merged: list[tuple[str, str]] = field(default_factory=list)  # (absorbed id, survivor id)
 
 
 @dataclass
@@ -175,7 +180,10 @@ class Market:
         self.event_news: list[EventNews] = []  # queued by events, collected into each TickReport
         self.dysons_started = 0
         self._follow_ups: list[tuple[str, float]] = []  # (asset id, multiplier value): dimmings turning into spheres
+        self._updated: list[Star] = []
+        self._merged: list[tuple[str, str]] = []
         self.name_pool: deque[str] = deque()  # names for new stars, filled by Gemma; FALLBACK_NAMES otherwise
+        self.used_names: list[str] = []  # every star's name this game, kept after the star is gone: none returns
         for seed in SEED_STARS:
             L = generate_luminosity(MAIN_SEQUENCE_L_BOUNDS[seed["spectral_type"]], self.rng)
             star = Star(
@@ -193,6 +201,7 @@ class Market:
                 star.ticks_left = seconds_to_ticks(seed["seconds_left"])
             star.history.append((self.tick, star.price))
             self.stars[star.id] = star
+            self.used_names.append(star.name)
         self.next_event_tick = self._roll_next_event_tick() if random_events else None
         self.next_spawn_tick = self._roll_next_spawn_tick() if random_events else None
 
@@ -249,6 +258,7 @@ class Market:
         self._enter_stage(star, stage)
         if change.old_stage == "protostar" and star.forecast is not None:
             change.note = ignition_note(star.forecast)
+            self._updated.append(star)  # its true spectral type, mass and temperature are now public
         return change
 
     def force_next_stage(self, asset_id: str) -> StageChange:
@@ -289,18 +299,23 @@ class Market:
         )
         star.history.append((self.tick, star.price))
         self.stars[star.id] = star
+        self.used_names.append(name)
         return star
 
     def _new_name(self) -> str:
-        taken = {star.name.lower() for star in self.stars.values()}
+        """A name no star has had this game, including stars that have since merged away."""
+        taken = {name_key(name) for name in self.used_names}
         while self.name_pool:
             name = self.name_pool.popleft()
-            if name.lower() not in taken:
+            if name_key(name) not in taken:
                 return name
-        unused = [name for name in FALLBACK_NAMES if name.lower() not in taken]
+        unused = [name for name in FALLBACK_NAMES if name_key(name) not in taken]
         if unused:
             return self.rng.choice(unused)
-        return f"Nova {self.tick}"
+        n = self.tick
+        while name_key(f"Nova {n}") in taken:
+            n += 1
+        return f"Nova {n}"
 
     def _new_id(self, name: str) -> str:
         base = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "star"
@@ -314,20 +329,71 @@ class Market:
         off: they were worth nothing anyway."""
         star.listed = False
         star.ticks_left = None
-        for event_id in [event.id for event in self.events.values() if event.asset_id == star.id]:
-            del self.events[event_id]
+        self._cancel_events(star)
         for player in self.players.values():
             player.holdings.pop(star.id, None)
 
-    def start_event(self, event_type: EventType, asset_id: str, director: bool = False) -> Event:
+    def _cancel_events(self, star: Star) -> None:
+        for event in [event for event in self.events.values() if star.id in event.asset_ids]:
+            event.cancel(self)
+            del self.events[event.id]
+
+    def retype(self, star: Star, mass: float, boost: float = 1.0, fresh_life: bool = False) -> bool:
+        """Give a main-sequence star a new mass, which can move it to a new spectral type and lifecycle path.
+
+        Its brightness scales with where the mass sits in its type's range (times `boost`), and a new type
+        brings that type's lifespan: a fresh one if `fresh_life`, otherwise no longer than it had left.
+        Returns whether the spectral type changed.
+        """
+        old_type, old_mass = star.spectral_type, star.mass
+        new_type = type_for_mass(mass)
+        low, high = MAIN_SEQUENCE_L_BOUNDS[new_type]
+        scale = luminosity_for_mass(new_type, mass) / luminosity_for_mass(old_type, old_mass)
+        star.base_L = min(max(star.base_L * scale, low), high) * boost
+        star.mass = mass
+        if new_type == old_type and not fresh_life:
+            return False
+        star.spectral_type = new_type
+        lifespan = roll_duration_ticks("main_sequence", new_type, self.rng)
+        if not fresh_life and star.ticks_left is not None and lifespan is not None:
+            lifespan = min(star.ticks_left, lifespan)
+        star.ticks_left = lifespan
+        if new_type != old_type:
+            star.temperature = round(self.rng.uniform(*MAIN_SEQUENCE_TEMPERATURE_BOUNDS[new_type]), -2)
+            self._updated.append(star)
+        return new_type != old_type
+
+    def absorb(self, survivor: Star, absorbed: Star, premium: float) -> None:
+        """Merge one star into another. Holders of the absorbed star are cashed out at `premium` × its price,
+        like shareholders in a takeover, and it leaves the program."""
+        for player in self.players.values():
+            qty = player.holdings.pop(absorbed.id, 0.0)
+            player.cash += qty * absorbed.price * premium
+        self._cancel_events(absorbed)
+        del self.stars[absorbed.id]
+        self._merged.append((absorbed.id, survivor.id))
+        if survivor not in self._updated:
+            self._updated.append(survivor)
+
+    def take_changes(self) -> tuple[list[Star], list[tuple[str, str]]]:
+        """Stars whose details changed, and merges, since the last call."""
+        changes = (self._updated, self._merged)
+        self._updated, self._merged = [], []
+        return changes
+
+    def start_event(
+        self, event_type: EventType, asset_id: str, director: bool = False, partner_id: str | None = None
+    ) -> Event:
         """Start an event on a star now, or raise MarketError if it can't happen to that star.
 
-        The director skips the market-wide limits but not the one-major-event-per-star rule.
+        The director skips the market-wide limits but not the one-major-event-per-star rule. Events between
+        two stars pick a partner at random unless `partner_id` names one.
         """
         star = self.get_star(asset_id)
-        if not eligible(event_type, star, self, director):
+        partner = self.get_star(partner_id) if partner_id else None
+        if not eligible(event_type, star, self, director, partner):
             raise MarketError(f"A {event_type.replace('_', ' ')} can't happen to {star.name} right now")
-        return self.add_event(create_event(event_type, star, self))
+        return self.add_event(create_event(event_type, star, self, partner))
 
     def add_event(self, event: Event) -> Event:
         """Start an event the caller has already checked, such as one event leading to another."""
@@ -342,7 +408,7 @@ class Market:
         return news
 
     def has_major_event(self, star: Star) -> bool:
-        return any(event.major and event.asset_id == star.id for event in self.events.values())
+        return any(event.major and star.id in event.asset_ids for event in self.events.values())
 
     def major_event_count(self) -> int:
         return sum(event.counts_towards_cap for event in self.events.values())
@@ -400,8 +466,10 @@ class Market:
                 report.spawned.append(self.spawn_star())
             self.next_spawn_tick = self._roll_next_spawn_tick()
         for event in list(self.events.values()):
+            if event.id not in self.events:
+                continue  # cancelled earlier this tick, such as by a merger absorbing its star
             if event.tick(self):
-                del self.events[event.id]
+                self.events.pop(event.id, None)
         for asset_id, start_value in self._follow_ups:
             origin = "It follows weeks of strange, ever-deeper dips in the star's light."
             report.events.append(self.add_event(create_dyson(self.stars[asset_id], self.tick, self.rng, start_value, origin)))
@@ -435,6 +503,7 @@ class Market:
             star.price = star.priced_at(star.impact)
             star.history.append((self.tick, star.price))
         report.event_news = self.take_event_news()
+        report.updated, report.merged = self.take_changes()
         return report
 
     def add_news(

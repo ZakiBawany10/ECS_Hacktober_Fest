@@ -159,6 +159,40 @@ EVENT_NOTES: dict[tuple[EventType, str], str] = {
         "The signal from {name} has been debunked: it was a hoax. Nothing about the star has changed, and "
         "anyone who traded on the rumour was fooled."
     ),
+    ("star_merger", "start"): (
+        "{name} and {partner} are spiralling towards each other in a tightening orbit. Both prices are "
+        "climbing on merger hype. If they merge, the bigger star absorbs the other, and holders of the "
+        "smaller one are bought out at a premium. Nobody knows yet whether they will."
+    ),
+    ("star_merger", "update"): (
+        "{name} and {partner} are {closeness}. Their prices are getting jumpy. Don't say whether they will merge."
+    ),
+    ("star_merger", "merged"): (
+        "{name} has swallowed {partner} in a brilliant merger. {name} is now a brighter, bigger star: "
+        "{new_type}. Holders of {partner} were bought out at a premium."
+    ),
+    ("star_merger", "near_miss"): (
+        "Near miss: {name} and {partner} have settled into stable orbits and won't merge after all. "
+        "The merger hype is draining out of both prices."
+    ),
+    ("star_merger", "called_off"): (
+        "The merger of {name} and {partner} is off: one of them has started to evolve and left the main "
+        "sequence. The merger hype has gone out of both prices."
+    ),
+    ("mass_transfer", "start"): (
+        "{name}, a {stage}, is spilling gas onto {gainer}. {name} is shrinking and its price falling, while "
+        "{gainer} grows and its price rises: a pair trade, selling one and buying the other."
+    ),
+    ("mass_transfer", "update"): (
+        "Gas is still streaming from {name} onto {gainer}: {name} keeps shrinking and {gainer} keeps growing."
+    ),
+    ("mass_transfer", "retyped"): (
+        "{gainer} has swallowed so much of {name}'s gas that it is now a type {new_type} star, up from type "
+        "{old_type}: brighter, but it will burn out sooner."
+    ),
+    ("mass_transfer", "ended"): (
+        "The flow of gas from {name} to {gainer} has stopped. {name} is left smaller and {gainer} bigger."
+    ),
 }
 
 EVENT_FALLBACKS: dict[tuple[EventType, str], tuple[str, str]] = {
@@ -183,6 +217,15 @@ EVENT_FALLBACKS: dict[tuple[EventType, str], tuple[str, str]] = {
     ("alien_signal", "start"): ("Mystery signal from {name}?", "An unconfirmed signal has been picked up from {name}. {flavour}"),
     ("alien_signal", "confirmed"): ("{name} signal confirmed", "The signal from {name} is genuine."),
     ("alien_signal", "debunked"): ("{name} signal was a hoax", "The signal from {name} has been debunked. Nothing has changed."),
+    ("star_merger", "start"): ("{name} and {partner} spiral inward", "The two stars are drawing together, and both prices are climbing."),
+    ("star_merger", "update"): ("{name} and {partner} close in", "The pair are {closeness}."),
+    ("star_merger", "merged"): ("{name} swallows {partner}", "{name} is now {new_type}. {partner} holders were bought out at a premium."),
+    ("star_merger", "near_miss"): ("{name} and {partner} miss", "The pair have settled into stable orbits. No merger."),
+    ("star_merger", "called_off"): ("{name} and {partner} merger off", "One of the pair has started to evolve. No merger."),
+    ("mass_transfer", "start"): ("{name} spills gas onto {gainer}", "{name} is shrinking and {gainer} growing: one falls, the other rises."),
+    ("mass_transfer", "update"): ("Gas still flows from {name} to {gainer}", "{name} keeps shrinking and {gainer} keeps growing."),
+    ("mass_transfer", "retyped"): ("{gainer} grows into a type {new_type} star", "Fed by {name}, {gainer} has outgrown type {old_type}."),
+    ("mass_transfer", "ended"): ("{name}'s gas stops flowing to {gainer}", "{name} ends smaller and {gainer} bigger."),
 }
 
 _HEADLINE_REQUEST = "Write a headline of at most 12 words and a body of one or two sentences."

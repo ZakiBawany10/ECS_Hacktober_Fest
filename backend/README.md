@@ -153,8 +153,10 @@ by weight among those with an eligible star:
 | `dyson_sphere` | 4 | main-sequence stars and giants, two building at a time | slides towards ~3% of the price over 300 s |
 | `intelligent_life` | 8 | G, K and M main-sequence stars settled for 60 s, three at a time | ×1.05, then ×1.20, then ×1.45 |
 | `alien_signal` | 8 | any star, one signal per star | none, or ±5–10% if true; a rumour |
+| `star_merger` | 8 | two main-sequence stars, one merger at a time | both +5% on hype; 85% merge |
+| `mass_transfer` | 10 | a red giant onto a main-sequence star, two at a time | donor down to −25%; gainer grows |
 
-Dimming and Dyson spheres are **major** events: at most 4 run at once, and a
+Dimming, Dyson spheres, mergers and mass transfers are **major** events: at most 4 run at once, and a
 star can only have one. Each rolls a hidden outcome when it starts, which never
 leaves the server:
 
@@ -176,6 +178,21 @@ leaves the server:
   write a convincing story either way; it never reaches clients.
 - **Mysterious dimming (5.6):** 85% dust, which clears. 15% an early Dyson
   sphere: the dips get deeper and more regular, then a sphere starts.
+- **Star merger (5.2):** two main-sequence stars spiral together over 50 s.
+  85% merge: the heavier star takes the combined mass, which can move it up a
+  spectral type (shorter life, maybe a supernova later), with the doc's 1.5×
+  "blue straggler" boost to its light and a fresh main-sequence life. The
+  absorbed star leaves the program, and its holders are cashed out at 1.2× its
+  price, like shareholders in a takeover. *Differs from the doc,* which converts
+  their shares by mass: under Rupert's log pricing that would lose them money.
+  15% are near misses, with a small give-back.
+- **Mass transfer (5.8):** a red giant or red hypergiant spills 10–30% of its
+  mass onto a main-sequence star over 90–150 s. The donor's price falls by up
+  to ~25% until its next stage. The gainer's brightness follows its mass within
+  its type's range, and if it outgrows the type it moves up one.
+- Mergers and transfers end early, with news, if either star evolves. *Differs
+  from the doc:* with no star positions on the server, pairs are picked at
+  random instead of by distance.
 
 Events report several news moments (start, progress updates, outcome). Key
 moments have `flash: true`. Dyson progress updates quote a figure, slanted by
@@ -202,7 +219,7 @@ the browser.
 | GET | `/portfolio/{player_id}` | | `Portfolio` |
 | POST | `/trade` | `{player_id, asset_id, side: "buy"\|"sell", qty}` | `Portfolio` |
 | POST | `/director/force_stage` | `{asset_id}` | `Asset` after moving it to its next stage |
-| POST | `/director/fire_event` | `{type, asset_id}` | `Asset` after starting the event on it |
+| POST | `/director/fire_event` | `{type, asset_id, partner_id?}` | `Asset` after starting the event on it |
 | POST | `/director/spawn_star` | `{spectral_type?}` | `Asset` of a new protostar (ignores the star limit) |
 
 ```text
@@ -259,12 +276,20 @@ curl -X POST localhost:8000/director/force_stage -H 'Content-Type: application/j
 {"type": "news", "item": {"id": "…", "t": 41, "kind": "lifecycle", "headline": "Kestrel goes supernova", "body": "…", "asset_ids": ["kestrel"], "source": "StarWire", "side": "human", "flash": false}}
 {"type": "listed", "asset": {"id": "fathom", "stage": "protostar", "…": "a full Asset"}}
 {"type": "delisted", "asset_id": "kestrel"}
+{"type": "asset_updated", "asset": {"id": "sol-nova", "spectral_type": "A", "…": "a full Asset"}}
+{"type": "merged", "asset_id": "kora", "into": "sol-nova"}
 ```
 
 `listed` arrives when a star spawns, before it appears in `tick` messages.
 `delisted` arrives when a black hole comes off the exchange. It keeps appearing
 in `tick` messages with `listed: false`; leave it off the exchange list but keep
 it on the map.
+
+`asset_updated` carries a star's new details when its spectral type, mass or
+temperature change: a protostar igniting, or a merger or mass transfer. `merged`
+means a star was absorbed: it leaves `/state` and `tick` messages for good, and
+its holders were cashed out. `partner_id` picks the second star for
+`star_merger` and `mass_transfer` (the gainer); it's random if left out.
 
 `tick` is sent every tick and `leaderboard` every 5 ticks. `news` is sent when
 an item is published, usually about 1.5 s after the stage change (Gemma's

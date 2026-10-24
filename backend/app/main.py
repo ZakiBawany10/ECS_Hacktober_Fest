@@ -24,6 +24,7 @@ from .spawn import projected_profile
 from .models import (
     Asset,
     AssetTick,
+    AssetUpdatedMessage,
     DelistedMessage,
     FireEventRequest,
     ForceStageRequest,
@@ -32,6 +33,7 @@ from .models import (
     LeaderboardMessage,
     LeaderboardRow,
     ListedMessage,
+    MergedMessage,
     NewsItem,
     NewsMessage,
     Portfolio,
@@ -81,7 +83,7 @@ def asset_out(star: Star) -> Asset:
         kind="star",
         stage=star.stage,
         spectral_type=spectral_type,
-        mass=mass,
+        mass=round(mass, 2),
         temperature=temperature,
         L=star.L,
         price=star.price,
@@ -166,6 +168,14 @@ def announce_forecast(star: Star) -> None:
     worker.request_headline(star_news_prompt("forecast", facts), star_news_fallback("forecast", facts), publish)
 
 
+async def broadcast_changes(updated: list[Star], merged: list[tuple[str, str]]) -> None:
+    for absorbed_id, survivor_id in merged:
+        await connections.broadcast(MergedMessage(asset_id=absorbed_id, into=survivor_id))
+    for star in updated:
+        if star.id in market.stars:
+            await connections.broadcast(AssetUpdatedMessage(asset=asset_out(star)))
+
+
 async def announce_delisting(star: Star) -> None:
     await connections.broadcast(DelistedMessage(asset_id=star.id))
     facts = {"name": star.name}
@@ -189,12 +199,13 @@ async def tick_loop() -> None:
         await asyncio.sleep(config.TICK_SECONDS)
         report = market.advance()
         if len(market.name_pool) < NAME_POOL_LOW:
-            taken = [star.name for star in market.stars.values()] + list(market.name_pool)
+            taken = market.used_names + list(market.name_pool)
             worker.request_names(taken, market.name_pool.extend)
         for star in report.spawned:
             await announce_spawn(star)
         for star in report.delisted:
             await announce_delisting(star)
+        await broadcast_changes(report.updated, report.merged)
         for change in report.stage_changes:
             announce_stage_change(change)
         for star in report.forecast_updates:
@@ -284,6 +295,7 @@ async def force_stage(request: ForceStageRequest) -> Asset:
     except MarketError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     announce_stage_change(change)
+    await broadcast_changes(*market.take_changes())
     return asset_out(market.get_star(change.asset_id))
 
 
@@ -298,7 +310,7 @@ async def spawn_star(request: SpawnStarRequest) -> Asset:
 @app.post("/director/fire_event")
 async def fire_event(request: FireEventRequest) -> Asset:
     try:
-        event = market.start_event(request.type, request.asset_id, director=True)
+        event = market.start_event(request.type, request.asset_id, director=True, partner_id=request.partner_id)
     except NotFoundError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
     except MarketError as error:

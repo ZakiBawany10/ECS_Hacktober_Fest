@@ -33,6 +33,7 @@ class ForceStageRequest(BaseModel):
 class FireEventRequest(BaseModel):
     type: EventType
     asset_id: str
+    partner_id: str | None = None  # for star_merger and mass_transfer (the gainer); random if left out
 
 
 class SpawnStarRequest(BaseModel):
@@ -122,6 +123,21 @@ class ListedMessage(BaseModel):
 
     type: Literal["listed"] = "listed"
     asset: Asset
+
+
+class AssetUpdatedMessage(BaseModel):
+    """A star's details changed: a protostar ignited, or a merger or mass transfer changed its type."""
+
+    type: Literal["asset_updated"] = "asset_updated"
+    asset: Asset
+
+
+class MergedMessage(BaseModel):
+    """A star was absorbed in a merger. It has left the program; its holders were cashed out."""
+
+    type: Literal["merged"] = "merged"
+    asset_id: str
+    into: str
 
 
 class DelistedMessage(BaseModel):
